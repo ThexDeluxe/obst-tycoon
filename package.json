@@ -1,0 +1,36 @@
+{
+  "name": "obst-tycoon",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "balance": "vite-node scripts/balance.ts",
+    "shots": "node scripts/shots.mjs"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@preact/signals": "^2.11.4",
+    "idb-keyval": "^6.3.0",
+    "preact": "^11.2.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "playwright": "^1.63.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.8",
+    "vite-node": "^6.0.0",
+    "vitest": "^5.1.0"
+  }
+}
