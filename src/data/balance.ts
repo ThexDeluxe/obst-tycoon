@@ -185,6 +185,28 @@ export const DISTRICT_PATH_RANGES: Record<DistrictId, [number, number]> = {
   industrial: [45, 55],
 };
 
+/** Platzfaktor je Verkaufsplatz (0,8 bis 1,2), Schlüssel ist die ID aus map.ts */
+export const SPOT_FACTORS: Record<string, number> = {
+  'res-1': 1.2,
+  'res-2': 1.1,
+  'res-3': 1.15,
+  'sta-1': 1.1,
+  'sta-2': 1.2,
+  'sta-3': 0.9,
+  'sta-4': 1.0,
+  'old-1': 1.1,
+  'old-2': 1.2,
+  'old-3': 1.0,
+  'old-4': 0.9,
+  'old-5': 0.8,
+  'old-6': 1.0,
+  'uni-1': 1.0,
+  'uni-2': 1.2,
+  'uni-3': 1.1,
+  'ind-1': 1.0,
+  'ind-2': 0.9,
+};
+
 export const SPOT = {
   factorMin: 0.8,
   factorMax: 1.2,

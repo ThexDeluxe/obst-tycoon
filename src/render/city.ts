@@ -15,6 +15,7 @@ import {
 import { RENDER } from '../data/balance';
 import { TILE, type Building, type World } from '../sim/world';
 import { Batcher, FACE } from './batcher';
+import { modelGeometry } from './models';
 import { PAL } from './palette';
 
 const H_SIDEWALK = 0.07;
@@ -529,12 +530,9 @@ export function buildCity(world: World): CityMeshes {
       }
     if (!nearPath && hash(x * 13, y * 7) < 0.16) treeTiles.push(i);
   }
-  const foliageB = new Batcher().color(0xffffff);
-  foliageB.cone(0, 0, 0.35, 1.05, 0.42, 7);
-  foliageB.cone(0, 0, 0.75, 1.45, 0.32, 7);
   const trunkB = new Batcher().color(PAL.trunk);
   trunkB.cylinder(0, 0, 0, 0.4, 0.06, 5);
-  const foliage = new InstancedMesh(foliageB.build(), new MeshLambertMaterial({ vertexColors: true }), treeTiles.length);
+  const foliage = new InstancedMesh(modelGeometry('tree'), new MeshLambertMaterial({ vertexColors: true }), treeTiles.length);
   const trunks = new InstancedMesh(trunkB.build(), material, treeTiles.length);
   const col = new Color();
   treeTiles.forEach((t, i) => {
@@ -553,12 +551,9 @@ export function buildCity(world: World): CityMeshes {
   calls += 2;
 
   // Straßenlaternen
-  const poleB = new Batcher().color(PAL.lamp);
-  poleB.cylinder(0, 0, 0, 1.35, 0.035, 5);
-  poleB.box(0, 1.3, -0.025, 0.32, 1.35, 0.025);
   const headB = new Batcher().color(0xfff1c9);
   headB.box(0.22, 1.24, -0.07, 0.4, 1.31, 0.07);
-  const poles = new InstancedMesh(poleB.build(), material, world.lamps.length);
+  const poles = new InstancedMesh(modelGeometry('lamp'), material, world.lamps.length);
   const heads = new InstancedMesh(headB.build(), new MeshLambertMaterial({ vertexColors: true, emissive: 0x000000 }), world.lamps.length);
   heads.instanceMatrix.setUsage(DynamicDrawUsage);
   world.lamps.forEach((l, i) => {

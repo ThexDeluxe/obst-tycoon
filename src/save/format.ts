@@ -1,7 +1,8 @@
 // Speicherformat: JSON mit Versionsnummer und einer Migrationsfunktion pro Version.
 // Diese Datei hat keine Abhängigkeit zum Browser und wird in den Tests geprüft.
 import type { GameState } from '../sim/types';
-import { STATE_VERSION } from '../sim/state';
+import { initEconomy, STATE_VERSION } from '../sim/state';
+import { getWorld } from '../sim/world';
 
 export const SAVE_FORMAT = 'obst-tycoon-save';
 
@@ -18,7 +19,13 @@ export class SaveError extends Error {}
 type Migration = (state: Record<string, unknown>) => Record<string, unknown>;
 
 /** migrations[v] hebt einen Spielstand von Version v auf v + 1. */
-export const migrations: Record<number, Migration> = {};
+export const migrations: Record<number, Migration> = {
+  // Version 1 (M1) kannte noch keine Wirtschaft: Startkapital, Startbestand und Startverkäufer ergänzen.
+  1: (raw) => {
+    initEconomy(raw as unknown as GameState, getWorld());
+    return raw;
+  },
+};
 
 export function serialize(state: GameState, label: string): string {
   const file: SaveFile = {
@@ -37,7 +44,11 @@ export function migrateState(raw: Record<string, unknown>, fromVersion: number):
   while (v < STATE_VERSION) {
     const m = migrations[v];
     if (!m) throw new SaveError(`Keine Migration von Version ${v} vorhanden.`);
-    s = m(s);
+    try {
+      s = m(s);
+    } catch {
+      throw new SaveError(`Der Spielstand ist beschädigt (Migration von Version ${v}).`);
+    }
     v++;
     s.version = v;
   }
@@ -85,4 +96,8 @@ export function validateState(s: GameState): void {
   if (!Array.isArray(s.queue)) s.queue = [];
   if (!Array.isArray(s.messages)) s.messages = [];
   if (s.phase !== 'day' && s.phase !== 'dayEnd') fail('Phase');
+  if (typeof s.money !== 'number' || !Number.isFinite(s.money)) fail('Kontostand');
+  if (!Array.isArray(s.staff) || !Array.isArray(s.crates) || !Array.isArray(s.orders)) fail('Personal oder Lager');
+  if (!s.marketFactors || !s.priceFactors || !s.ledger) fail('Großmarkt');
+  if (!Array.isArray(s.reports)) s.reports = [];
 }

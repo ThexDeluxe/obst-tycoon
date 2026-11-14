@@ -1,9 +1,22 @@
 // Spieloberfläche über der 3D-Ansicht: obere Leiste, Menü-Reiter, Kamera-Knöpfe, Debug-Anzeige.
 import type { ComponentChildren, JSX } from 'preact';
 import { currentGame } from '../game';
+import { REPUTATION_THRESHOLDS } from '../data/balance';
+import { levelProgress, profitToday } from '../sim/selectors';
 import { clockText, WEEKDAYS, WEEKDAYS_SHORT, weekdayOf } from '../sim/time';
 import {
   IconClose,
+  IconEquipment,
+  IconGoal,
+  IconInfo,
+  IconMap,
+  IconMarket,
+  IconReport,
+  IconStaff,
+  IconStar,
+  IconTruck,
+  IconWarehouse,
+  IconWarning,
   IconFast,
   IconFaster,
   IconFullscreen,
@@ -16,9 +29,16 @@ import {
   IconZoomIn,
   IconZoomOut,
 } from './icons';
-import { activeTab, portraitDismissed, settings, speedIndex, toast, uiTick, type TabId } from './store';
+import { activeTab, notices, portraitDismissed, reportHidden, settings, speedIndex, toast, uiTick, type TabId } from './store';
 import { SettingsPanel } from './panels/SettingsPanel';
-import { int } from './format';
+import { StaffPanel } from './panels/StaffPanel';
+import { MarketPanel } from './panels/MarketPanel';
+import { WarehousePanel } from './panels/WarehousePanel';
+import { EquipmentPanel } from './panels/EquipmentPanel';
+import { DistrictsPanel, GoalPanel } from './panels/DistrictsPanel';
+import { ReportsPanel } from './panels/ReportsPanel';
+import { ReportView } from './panels/ReportView';
+import { int, money, signedMoney } from './format';
 
 export interface TabDef {
   id: TabId;
@@ -28,7 +48,16 @@ export interface TabDef {
   render: () => ComponentChildren;
 }
 
-export const TABS: TabDef[] = [{ id: 'settings', label: 'Einstellungen', key: 'O', icon: IconSettings, render: () => <SettingsPanel /> }];
+export const TABS: TabDef[] = [
+  { id: 'staff', label: 'Personal', key: 'P', icon: IconStaff, render: () => <StaffPanel /> },
+  { id: 'market', label: 'Großmarkt', key: 'G', icon: IconMarket, render: () => <MarketPanel /> },
+  { id: 'warehouse', label: 'Lager und Bau', key: 'L', icon: IconWarehouse, render: () => <WarehousePanel /> },
+  { id: 'equipment', label: 'Ausrüstung', key: 'R', icon: IconEquipment, render: () => <EquipmentPanel /> },
+  { id: 'districts', label: 'Viertel', key: 'V', icon: IconMap, render: () => <DistrictsPanel /> },
+  { id: 'goal', label: 'Ziel', key: 'Z', icon: IconGoal, render: () => <GoalPanel /> },
+  { id: 'reports', label: 'Berichte', key: 'B', icon: IconReport, render: () => <ReportsPanel /> },
+  { id: 'settings', label: 'Einstellungen', key: 'O', icon: IconSettings, render: () => <SettingsPanel /> },
+];
 
 function SpeedButtons() {
   const g = currentGame();
@@ -56,18 +85,92 @@ export function TopBar() {
   const g = currentGame();
   if (!g) return null;
   const s = g.state;
+  const profit = profitToday(s.ledger);
+  const nextThreshold = REPUTATION_THRESHOLDS[s.level];
   return (
     <div class="topbar panel">
+      <div class="tb-item" title="Kontostand (Dispositionsrahmen bis −1.000 €)">
+        <span class="tb-label">Konto</span>
+        <span class={`tb-value ${s.money < 0 ? 'neg' : ''}`}>{money(s.money)}</span>
+      </div>
+      <div class="tb-item" title="Einnahmen minus Ausgaben heute">
+        <span class="tb-label">Heute</span>
+        <span class={`tb-value ${profit >= 0 ? 'pos' : 'neg'}`}>{signedMoney(profit)}</span>
+      </div>
       <div class="tb-item">
-        <span class="tb-label">{WEEKDAYS[weekdayOf(s.day)]}</span>
+        <span class="tb-label">
+          <span class="tb-hide-narrow">{WEEKDAYS[weekdayOf(s.day)]}</span>
+          <span class="tb-show-narrow">{WEEKDAYS_SHORT[weekdayOf(s.day)]}</span>
+        </span>
         <span class="tb-value">Tag {s.day + 1}</span>
       </div>
       <div class="tb-item">
         <span class="tb-label">Uhrzeit</span>
         <span class="tb-value mono">{clockText(s)}</span>
       </div>
+      <div
+        class="tb-item"
+        title={nextThreshold ? `Gesamtumsatz ${money(s.totalRevenue)} von ${money(nextThreshold)} für Stufe ${s.level + 1}` : 'Höchste Ruf-Stufe'}
+      >
+        <span class="tb-label">Ruf</span>
+        <span class="tb-value rep">
+          <IconStar size={13} /> {s.level}
+          <div class="rep-bar">
+            <div style={{ width: `${(levelProgress(s) * 100).toFixed(0)}%` }} />
+          </div>
+        </span>
+      </div>
       <div class="tb-spacer" />
-      <SpeedButtons />
+      {s.phase === 'dayEnd' && reportHidden.value ? (
+        <>
+          <button class="btn small" onClick={() => (reportHidden.value = false)}>
+            Bericht
+          </button>
+          <button class="btn small primary" onClick={() => g.command({ type: 'nextDay' })}>
+            Tag beginnen
+          </button>
+        </>
+      ) : (
+        <SpeedButtons />
+      )}
+    </div>
+  );
+}
+
+const NOTICE_ICON: Record<string, (p: { size?: number }) => JSX.Element> = {
+  delivery: IconTruck,
+  warning: IconWarning,
+  danger: IconWarning,
+  unlock: IconStar,
+  info: IconInfo,
+  report: IconReport,
+};
+
+/** Meldungen oben rechts; ein Tippen fährt die Kamera zum Ort */
+export function Notices() {
+  void uiTick.value;
+  const g = currentGame();
+  const now = performance.now();
+  const list = notices.value.filter((n) => now - n.time < 7000);
+  if (!g || !list.length) return null;
+  return (
+    <div class="notices">
+      {list.map((n) => {
+        const Icon = NOTICE_ICON[n.kind] ?? IconInfo;
+        return (
+          <button
+            key={n.id}
+            class={`notice panel ${n.kind}`}
+            onClick={() => {
+              if (n.x !== undefined && n.y !== undefined) g.focus(n.x + 0.5, n.y + 0.5);
+              notices.value = notices.value.filter((x) => x.id !== n.id);
+            }}
+          >
+            <Icon size={16} />
+            <span>{n.text}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -154,14 +257,16 @@ export function DebugOverlay() {
   const g = currentGame();
   if (!g || !settings.value.debug) return null;
   const s = g.state;
-  const entities = s.peds.length + s.vehicles.length;
+  const entities = s.peds.length + s.vehicles.length + s.staff.length;
   return (
     <div class="debug mono">
       <div>FPS {g.fps}</div>
       <div>Draw Calls {g.view.stats.drawCalls}</div>
       <div>Dreiecke {int(g.view.stats.triangles)}</div>
       <div>Ticks/s {g.tps}</div>
-      <div>Entitäten {entities} (Passanten {s.peds.length})</div>
+      <div>
+        Entitäten {entities} (Passanten {s.peds.length}, eigene Leute {s.staff.length}, Fahrzeuge {s.vehicles.length})
+      </div>
     </div>
   );
 }
@@ -190,18 +295,31 @@ export function PortraitHint() {
 export function DayEndDialog() {
   void uiTick.value;
   const g = currentGame();
-  if (!g || g.state.phase !== 'dayEnd') return null;
+  if (!g || g.state.phase !== 'dayEnd' || reportHidden.value) return null;
   const s = g.state;
+  const r = s.reports[s.reports.length - 1];
   return (
     <div class="modal-backdrop">
       <div class="modal panel">
         <header>
-          <h2>Tagesabschluss {WEEKDAYS_SHORT[weekdayOf(s.day)]}, Tag {s.day + 1}</h2>
+          <h2>
+            Tagesbericht {WEEKDAYS_SHORT[weekdayOf(s.day)]}, Tag {s.day + 1}
+          </h2>
         </header>
-        <div class="modal-body">
-          <p>Der Verkaufstag ist beendet. Die Nacht wird übersprungen.</p>
-        </div>
+        <div class="modal-body">{r ? <ReportView report={r} state={s} /> : <p>Der Verkaufstag ist beendet.</p>}</div>
         <footer>
+          <button
+            class="btn"
+            onClick={() => {
+              reportHidden.value = true;
+              activeTab.value = 'market';
+            }}
+          >
+            Zum Großmarkt
+          </button>
+          <button class="btn" onClick={() => (reportHidden.value = true)}>
+            Ausblenden
+          </button>
           <button class="btn primary" onClick={() => g.command({ type: 'nextDay' })}>
             Nächster Tag
           </button>

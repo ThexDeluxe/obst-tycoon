@@ -4,9 +4,10 @@ import { currentGame } from '../game';
 import { getWorld } from '../sim/world';
 import { createInitialState } from '../sim/state';
 import type { GameState } from '../sim/types';
-import { CameraControls, DayEndDialog, DebugOverlay, PortraitHint, SidePanel, TabRail, TABS, Toast, TopBar } from './Hud';
+import { CameraControls, DayEndDialog, DebugOverlay, Notices, PortraitHint, SidePanel, TabRail, TABS, Toast, TopBar } from './Hud';
+import { AssignBanner, SelectionCard } from './Selection';
 import { MainMenu } from './MainMenu';
-import { activeTab, screen, settings } from './store';
+import { activeTab, assignFor, screen, selection, settings } from './store';
 
 function startGame(state: GameState): void {
   const g = currentGame();
@@ -24,7 +25,9 @@ export function App() {
     g.keyHook = (e) => {
       if (screen.value !== 'game') return;
       if (e.code === 'Escape') {
-        activeTab.value = null;
+        if (assignFor.value !== null) assignFor.value = null;
+        else if (selection.value) selection.value = null;
+        else activeTab.value = null;
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -50,6 +53,9 @@ export function App() {
       <TopBar />
       <TabRail />
       <SidePanel />
+      <SelectionCard />
+      <AssignBanner />
+      <Notices />
       <CameraControls />
       <DebugOverlay />
       <DayEndDialog />

@@ -1,5 +1,5 @@
 // Statische Spielwelt, aus den Kartendaten abgeleitet. Gehört nicht zum Spielstand.
-import { DISTRICT_IDS, type DistrictId, type PathMode } from '../data/balance';
+import { DISTRICT_IDS, SPOT_FACTORS, type DistrictId, type PathMode } from '../data/balance';
 import * as MAP from '../data/map';
 
 export const TILE = {
@@ -285,7 +285,7 @@ export function createWorld(): World {
       tile,
       district: s.district,
       districtIndex: DISTRICT_IDS.indexOf(s.district),
-      factor: s.factor,
+      factor: SPOT_FACTORS[s.id] ?? 1,
       parking: !!s.parking,
     };
   });

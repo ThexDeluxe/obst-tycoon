@@ -1,4 +1,5 @@
 // Karte der Stadt: ASCII-Raster (64 × 64) plus Listen für Verkaufsplätze, Routen und Gebiete.
+// Die Platzfaktoren der Verkaufsplätze stehen als Spielwerte in balance.ts (SPOT_FACTORS).
 // x wächst nach Osten, y nach Süden. Ein Zeichen entspricht einem Feld.
 //
 // Feldtypen:
@@ -100,31 +101,29 @@ export interface SpotData {
   x: number;
   y: number;
   district: DistrictId;
-  /** Platzfaktor 0,8 bis 1,2 */
-  factor: number;
   /** Parkbucht für den Verkaufswagen */
   parking?: boolean;
 }
 
 export const SPOTS: SpotData[] = [
-  { id: 'res-1', name: 'Lindenstraße', x: 18, y: 27, district: 'residential', factor: 1.0 },
-  { id: 'res-2', name: 'Gartenweg', x: 8, y: 31, district: 'residential', factor: 0.9, parking: true },
-  { id: 'res-3', name: 'Stadtpark', x: 15, y: 19, district: 'residential', factor: 1.1 },
-  { id: 'sta-1', name: 'Bahnhofsvorplatz West', x: 20, y: 7, district: 'station', factor: 1.1 },
-  { id: 'sta-2', name: 'Haupteingang', x: 25, y: 9, district: 'station', factor: 1.2 },
-  { id: 'sta-3', name: 'Busbahnhof', x: 22, y: 10, district: 'station', factor: 0.9, parking: true },
-  { id: 'sta-4', name: 'Bahnhofsvorplatz Ost', x: 27, y: 10, district: 'station', factor: 1.0 },
-  { id: 'old-1', name: 'Fußgängerzone', x: 47, y: 27, district: 'oldtown', factor: 1.1 },
-  { id: 'old-2', name: 'Marktplatz Nord', x: 42, y: 24, district: 'oldtown', factor: 1.2 },
-  { id: 'old-3', name: 'Marktplatz Süd', x: 44, y: 31, district: 'oldtown', factor: 1.0 },
-  { id: 'old-4', name: 'Kirchgasse', x: 39, y: 33, district: 'oldtown', factor: 0.9 },
-  { id: 'old-5', name: 'Brunnengasse', x: 38, y: 18, district: 'oldtown', factor: 0.8 },
-  { id: 'old-6', name: 'Rathausecke', x: 46, y: 21, district: 'oldtown', factor: 1.0, parking: true },
-  { id: 'uni-1', name: 'Campuswiese', x: 31, y: 50, district: 'campus', factor: 1.0 },
-  { id: 'uni-2', name: 'Hörsaalgebäude', x: 34, y: 46, district: 'campus', factor: 1.2, parking: true },
-  { id: 'uni-3', name: 'Mensa', x: 36, y: 50, district: 'campus', factor: 1.1 },
-  { id: 'ind-1', name: 'Werkstor Nord', x: 46, y: 11, district: 'industrial', factor: 1.0, parking: true },
-  { id: 'ind-2', name: 'Hallenhof', x: 56, y: 24, district: 'industrial', factor: 0.9 },
+  { id: 'res-1', name: 'Lindenstraße', x: 18, y: 27, district: 'residential' },
+  { id: 'res-2', name: 'Gartenweg', x: 8, y: 31, district: 'residential', parking: true },
+  { id: 'res-3', name: 'Stadtpark', x: 15, y: 19, district: 'residential' },
+  { id: 'sta-1', name: 'Bahnhofsvorplatz West', x: 20, y: 7, district: 'station' },
+  { id: 'sta-2', name: 'Haupteingang', x: 25, y: 9, district: 'station' },
+  { id: 'sta-3', name: 'Busbahnhof', x: 22, y: 10, district: 'station', parking: true },
+  { id: 'sta-4', name: 'Bahnhofsvorplatz Ost', x: 27, y: 10, district: 'station' },
+  { id: 'old-1', name: 'Fußgängerzone', x: 47, y: 27, district: 'oldtown' },
+  { id: 'old-2', name: 'Marktplatz Nord', x: 42, y: 24, district: 'oldtown' },
+  { id: 'old-3', name: 'Marktplatz Süd', x: 44, y: 31, district: 'oldtown' },
+  { id: 'old-4', name: 'Kirchgasse', x: 39, y: 33, district: 'oldtown' },
+  { id: 'old-5', name: 'Brunnengasse', x: 38, y: 18, district: 'oldtown' },
+  { id: 'old-6', name: 'Rathausecke', x: 46, y: 21, district: 'oldtown', parking: true },
+  { id: 'uni-1', name: 'Campuswiese', x: 31, y: 50, district: 'campus' },
+  { id: 'uni-2', name: 'Hörsaalgebäude', x: 34, y: 46, district: 'campus', parking: true },
+  { id: 'uni-3', name: 'Mensa', x: 36, y: 50, district: 'campus' },
+  { id: 'ind-1', name: 'Werkstor Nord', x: 46, y: 11, district: 'industrial', parking: true },
+  { id: 'ind-2', name: 'Hallenhof', x: 56, y: 24, district: 'industrial' },
 ];
 
 /** Grundstück des Lagerhauses (4 Bauabschnitte zu je 6 × 4 Feldern) und Tor */

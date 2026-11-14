@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { currentGame } from '../../game';
 import { exportToFile, listSlots, saveToSlot, slotName, SLOT_IDS, type SlotInfo } from '../../save/storage';
-import { screen, settings, showToast, updateSettings, type Settings } from '../store';
+import { screen, settings, showToast, updateSettings, type Settings, uiTick } from '../store';
 
 function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange(v: boolean): void }) {
   return (
@@ -14,6 +14,8 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
 }
 
 export function SettingsPanel() {
+  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+  void uiTick.value;
   const s = settings.value;
   const g = currentGame();
   const [slots, setSlots] = useState<(SlotInfo | null)[]>([]);
@@ -99,6 +101,12 @@ export function SettingsPanel() {
             </button>
             <button class="btn small" onClick={() => g.command({ type: 'debugSkipHours', hours: 24 })}>
               Bis Tagesende
+            </button>
+            <button class="btn small" onClick={() => g.command({ type: 'debugSetMoney', amount: g.state.money + 5000 })}>
+              +5.000 €
+            </button>
+            <button class="btn small" onClick={() => g.command({ type: 'debugSetLevel', level: g.state.level + 1 })}>
+              Ruf-Stufe +1
             </button>
           </div>
         </>

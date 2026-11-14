@@ -56,6 +56,23 @@ export const speedIndex = signal(1);
 export const toast = signal<{ text: string; kind: 'info' | 'error'; id: number } | null>(null);
 export const portraitDismissed = signal(false);
 
+export type Selection = { kind: 'person'; id: number } | { kind: 'spot'; index: number } | null;
+export const selection = signal<Selection>(null);
+/** Person, für die gerade ein Verkaufsplatz gewählt wird */
+export const assignFor = signal<number | null>(null);
+/** Tagesbericht ausgeblendet, damit noch bestellt werden kann */
+export const reportHidden = signal(false);
+
+export interface Notice {
+  id: number;
+  kind: string;
+  text: string;
+  x?: number;
+  y?: number;
+  time: number;
+}
+export const notices = signal<Notice[]>([]);
+
 let toastId = 0;
 export function showToast(text: string, kind: 'info' | 'error' = 'info'): void {
   const id = ++toastId;
