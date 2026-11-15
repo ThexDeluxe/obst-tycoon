@@ -1,4 +1,6 @@
-// Gängige Vor- und Nachnamen für Bewerber.
+// Namen und Bezeichnungen.
+import type { DistrictId, FruitId } from './balance';
+
 export const FIRST_NAMES = [
   'Anna', 'Ben', 'Clara', 'David', 'Elena', 'Felix', 'Greta', 'Hannah', 'Jan', 'Jonas', 'Julia', 'Karl', 'Laura', 'Lea',
   'Leon', 'Lukas', 'Marie', 'Max', 'Mia', 'Niklas', 'Nina', 'Paul', 'Sophie', 'Tim', 'Tobias', 'Lena', 'Emma', 'Finn',
@@ -14,38 +16,25 @@ export const LAST_NAMES = [
   'Yılmaz', 'Kaya', 'Nowak', 'Kowalski', 'Jung', 'Hahn', 'Vogel', 'Friedrich', 'Keller', 'Günther', 'Frank', 'Berger',
 ];
 
-export const PRODUCT_NAMES = {
+export const FRUIT_NAMES: Record<FruitId, string> = {
   apple: 'Äpfel',
   banana: 'Bananen',
-  grape: 'Trauben',
   strawberry: 'Erdbeeren',
+  grape: 'Trauben',
   mango: 'Mangos',
   dragonfruit: 'Drachenfrüchte',
-  pomegranate: 'Granatäpfel',
-} as const;
+};
 
-export const DISTRICT_NAMES = {
-  residential: 'Wohnviertel',
-  station: 'Bahnhof',
+export const DISTRICT_NAMES: Record<DistrictId, string> = {
+  underground: 'Untergrund',
+  station: 'Bahnhofsviertel',
   oldtown: 'Altstadt',
-  campus: 'Uni',
-  industrial: 'Industriegebiet',
-} as const;
+  scene: 'Szeneviertel',
+  shopping: 'Einkaufsmeile',
+  banking: 'Bankenviertel',
+};
 
-export const EQUIPMENT_NAMES = {
-  tray: 'Bauchladen',
+export const UPGRADE_NAMES = {
   handcart: 'Handkarren',
-  scooter: 'E-Scooter mit Box',
-  cargobike: 'Lastenrad',
-  foodtruck: 'Verkaufswagen',
+  cargobike: 'Lastenräder',
 } as const;
-
-export const ROOM_NAMES = {
-  shelf: 'Regalreihe',
-  coldroom: 'Kühlzelle',
-  ramp: 'Laderampe',
-  radio: 'Funkzentrale',
-  office: 'Büro',
-} as const;
-
-export const ROMAN = ['I', 'II', 'III', 'IV', 'V'];

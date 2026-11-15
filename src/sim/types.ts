@@ -1,8 +1,6 @@
 // Datentypen des Spielstands. Alles ist reines, serialisierbares JSON ohne Klasseninstanzen.
-import type { EquipmentId, ProductId, RoomType } from '../data/balance';
+import type { FruitId } from '../data/balance';
 import type { Command } from './commands';
-
-export type Phase = 'day' | 'dayEnd';
 
 export interface Pedestrian {
   id: number;
@@ -44,21 +42,7 @@ export interface Vehicle {
   nextStop: number;
 }
 
-export interface Room {
-  slot: number;
-  type: RoomType;
-  /** Ausbaustufe (nur Büro) */
-  level: number;
-  /** Verbleibende Bauzeit in Ticks, 0 = fertig */
-  buildTicks: number;
-}
-
-export interface WarehouseState {
-  sections: number;
-  rooms: Room[];
-}
-
-export type MessageKind = 'info' | 'delivery' | 'warning' | 'danger' | 'unlock' | 'report';
+export type MessageKind = 'info' | 'money' | 'warning' | 'danger' | 'unlock' | 'story' | 'battle';
 
 export interface Message {
   id: number;
@@ -71,77 +55,26 @@ export interface Message {
   y?: number;
 }
 
-// ---------------------------------------------------------------------------
-// Wirtschaft (ab Version 2)
-// ---------------------------------------------------------------------------
-
-/** Eine Kiste im Lager. Frische 1 = 100 %, 0 = verdorben. */
+/** Eine volle Kiste im Lager */
 export interface Crate {
   id: number;
-  product: ProductId;
+  fruit: FruitId;
+}
+
+/** Ware, die ein Verkäufer trägt: eine angebrochene oder volle Kiste */
+export interface Load {
+  fruit: FruitId;
   units: number;
-  fresh: number;
-  cooled: boolean;
 }
 
-/** Ware, die ein Verkäufer bei sich trägt (eine Charge gleicher Frische) */
-export interface CargoItem {
-  product: ProductId;
-  units: number;
-  fresh: number;
-}
+export type DealerMode = 'idle' | 'loading' | 'toSpot' | 'setup' | 'selling' | 'packing' | 'toWarehouse';
 
-export interface OrderLine {
-  product: ProductId;
-  crates: number;
-  /** Preis je Einheit nach Tagesfaktor und Rabatt */
-  unitPrice: number;
-}
-
-export interface PendingOrder {
-  id: number;
-  lines: OrderLine[];
-  /** Liefertag und Uhrzeit (Ticks seit 06:00) */
-  deliverDay: number;
-  deliverTick: number;
-}
-
-export interface Applicant {
+export interface Dealer {
   id: number;
   name: string;
-  talent: number;
-  vigilance: number;
-  wage: number;
-}
-
-export type VendorMode =
-  | 'idle'
-  | 'loading'
-  | 'waitStock'
-  | 'toSpot'
-  | 'setup'
-  | 'selling'
-  | 'packing'
-  | 'toWarehouse';
-
-export type Assortment = 'auto' | Partial<Record<ProductId, number>>;
-
-export interface Person {
-  id: number;
-  name: string;
-  role: 'vendor';
-  talent: number;
-  vigilance: number;
-  wage: number;
-  hiredDay: number;
-  equipment: EquipmentId;
-  /** Zugewiesener Verkaufsplatz (Index) oder null */
-  spot: number | null;
-  /** Platz an dem der Verkäufer gerade steht oder hingeht */
-  activeSpot: number | null;
-  /** Position am Platz (0 oder 1) */
-  slot: number;
-  mode: VendorMode;
+  /** Zufallswert für das Aussehen */
+  look: number;
+  mode: DealerMode;
   timer: number;
   x: number;
   y: number;
@@ -150,41 +83,49 @@ export interface Person {
   ang: number;
   path: number[] | null;
   pathIdx: number;
-  /** Zielpunkt am Ende des Weges (mit Versatz am Platz) */
   endX: number;
   endY: number;
-  cargo: CargoItem[];
-  assortment: Assortment;
-  revenueToday: number;
-  unitsToday: number;
-  revenueTotal: number;
+  /** Platz, den der Verkäufer gewählt hat (Index) */
+  spot: number | null;
+  /** Position am Platz (0 oder 1) */
+  slot: number;
+  load: Load[];
+  soldToday: number;
+  earnedToday: number;
+  earnedTotal: number;
 }
 
-export interface Ledger {
-  sales: number;
-  refunds: number;
-  purchases: number;
-  wages: number;
-  running: number;
-  fines: number;
-  investments: number;
+export interface DistrictState {
+  owner: 'player' | 'gang';
+  /** Kämpfer der Gemüsegang in diesem Viertel */
+  gang: number;
 }
 
-export interface DistrictDay {
-  revenue: number;
-  units: number;
+export interface BattleRoll {
+  attacker: number[];
+  defender: number[];
+  attackerLoss: number;
+  defenderLoss: number;
 }
 
-export interface DayReport {
-  day: number;
-  ledger: Ledger;
-  net: number;
-  moneyEnd: number;
-  spoiledValue: number;
-  spoiledUnits: number;
-  districts: { revenue: number; competitor: number; share: number; attention: number }[];
-  vendors: { id: number; name: string; revenue: number; units: number }[];
-  events: string[];
+export interface Battle {
+  district: number;
+  attackers: number;
+  defenders: number;
+  startAttackers: number;
+  startDefenders: number;
+  rounds: number;
+  last: BattleRoll | null;
+  result: 'running' | 'won' | 'lost' | 'retreated';
+}
+
+export interface GameStats {
+  cratesBought: number;
+  sold: number;
+  battlesWon: number;
+  battlesLost: number;
+  fightersLost: number;
+  gangDefeated: number;
 }
 
 export interface GameState {
@@ -192,44 +133,35 @@ export interface GameState {
   seed: number;
   rng: number;
   ambientRng: number;
-  /** Spieltag, 0 ist der erste Montag */
+  /** Spieltag, 0 ist der erste Tag */
   day: number;
   /** Ticks seit 06:00 des aktuellen Tages */
   dayTick: number;
   totalTicks: number;
-  phase: Phase;
   nextId: number;
   /** Passanten und Verkehr berechnen (im Balancing-Bot abgeschaltet) */
   ambient: boolean;
   peds: Pedestrian[];
   vehicles: Vehicle[];
   ambientTimer: number;
-  warehouse: WarehouseState;
   queue: Command[];
   messages: Message[];
 
-  // Ab Version 2
   money: number;
-  totalRevenue: number;
-  level: number;
-  ledger: Ledger;
+  earnedTotal: number;
+  earnedToday: number;
+  /** Einnahmen der letzten abgeschlossenen Tage */
+  history: number[];
   crates: Crate[];
-  /** Tagespreisfaktor des Großmarkts je Produkt */
-  marketFactors: Record<ProductId, number>;
-  /** Verkaufspreisfaktor des Spielers je Produkt */
-  priceFactors: Record<ProductId, number>;
-  orders: PendingOrder[];
-  staff: Person[];
-  applicants: Applicant[];
-  /** Gekaufte, nicht zugewiesene Ausrüstung */
-  inventory: Record<string, number>;
-  /** Löhne entlassener Personen, die beim Tagesabschluss fällig werden */
-  pendingWages: number;
-  districtDay: DistrictDay[];
-  /** Marktanteil des Vortags je Viertel */
-  shares: number[];
-  reports: DayReport[];
-  dayEvents: string[];
-  insolvencyStreak: number;
-  stats: { spoiledValue: number; daysPlayed: number };
+  shelves: number;
+  dealers: Dealer[];
+  fighters: number;
+  /** Gekaufte Ausrüstung für alle Verkäufer: 0 keine, 1 Handkarren, 2 Lastenräder */
+  upgrade: number;
+  districts: DistrictState[];
+  battle: Battle | null;
+  /** Aktueller Auftrag (Index in der Geschichte) */
+  story: number;
+  won: boolean;
+  stats: GameStats;
 }

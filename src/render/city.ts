@@ -2,11 +2,13 @@
 // wiederkehrende Objekte (Bäume, Laternen) sind InstancedMeshes.
 import {
   Color,
+  DoubleSide,
   DynamicDrawUsage,
   Group,
   InstancedMesh,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   PlaneGeometry,
   Quaternion,
@@ -370,6 +372,146 @@ function buildBuilding(b: Batcher, world: World, bld: Building): void {
       }
       break;
     }
+    case 'store': {
+      // Kaufhaus oder Bürohaus: Glasfront im Erdgeschoss, Fensterbänder darüber
+      const wall = pick(PAL.store, v);
+      const sign = pick(PAL.awning, hash(bld.x0 * 5, bld.y0 * 11));
+      for (const t of bld.tiles) {
+        const tx = t % w, ty = (t / w) | 0;
+        const faces = exteriorFaces(world, bld, tx, ty);
+        b.color(wall);
+        b.box(tx, 0, ty, tx + 1, h, ty + 1, faces);
+        b.color(PAL.roofFlat);
+        b.flat(tx, ty, tx + 1, ty + 1, h);
+        parapet(b, faces, tx, ty, h);
+        for (const sd of SIDES) {
+          if (!(faces & sd.face)) continue;
+          const fixed = sideFixed(sd.side, tx, ty);
+          const [a0, a1] = sideRange(sd.side, tx, ty);
+          if (walkableNeighbor(world, tx, ty, sd.dx, sd.dy)) {
+            b.color(PAL.windowLight);
+            b.wallQuad(sd.side, fixed, a0 + 0.02, a1 - 0.02, 0.1, 1.05);
+            b.color(sign);
+            wallQuadOut(b, sd.side, fixed, a0, a1, 1.12, 1.42);
+          }
+          b.color(PAL.storeBand);
+          for (let f = 2; f < Math.floor(h - 0.2); f++) b.wallQuad(sd.side, fixed, a0 + 0.03, a1 - 0.03, f + 0.25, f + 0.75);
+        }
+      }
+      if (bld.tiles.length >= 8) {
+        b.color(0x9a9da1);
+        const t = bld.tiles[Math.floor(hash(bld.x0, bld.y1) * bld.tiles.length)];
+        b.box((t % w) + 0.2, h, ((t / w) | 0) + 0.2, (t % w) + 0.8, h + 0.35, ((t / w) | 0) + 0.8);
+      }
+      break;
+    }
+    case 'tower': {
+      // Hochhaus mit Glasfassade, Geschossbändern und Dachaufbau
+      const glass = pick(PAL.towerGlass, v);
+      for (const t of bld.tiles) {
+        const tx = t % w, ty = (t / w) | 0;
+        const faces = exteriorFaces(world, bld, tx, ty);
+        b.color(glass);
+        b.box(tx, 0, ty, tx + 1, h, ty + 1, faces);
+        b.color(PAL.roofFlat);
+        b.flat(tx, ty, tx + 1, ty + 1, h);
+        for (const sd of SIDES) {
+          if (!(faces & sd.face)) continue;
+          const fixed = sideFixed(sd.side, tx, ty);
+          const [a0, a1] = sideRange(sd.side, tx, ty);
+          b.color(PAL.towerLobby);
+          b.wallQuad(sd.side, fixed, a0, a1, 0.05, 1.2);
+          b.color(PAL.towerBand);
+          for (let f = 2; f < Math.floor(h); f++) b.wallQuad(sd.side, fixed, a0, a1, f - 0.08, f + 0.08);
+          if (((sd.side === 'px' || sd.side === 'nx' ? ty : tx) & 1) === 0) {
+            b.color(PAL.towerMullion);
+            b.wallQuad(sd.side, fixed, a0 + 0.47, a0 + 0.53, 1.2, h);
+          }
+        }
+        parapet(b, faces, tx, ty, h);
+      }
+      // Dachaufbau
+      const cx = (bld.x0 + bld.x1 + 1) / 2, cz = (bld.y0 + bld.y1 + 1) / 2;
+      const rw = (bld.x1 - bld.x0 + 1) * 0.28, rd = (bld.y1 - bld.y0 + 1) * 0.28;
+      if (bld.char === 'Y') {
+        // Hubschrauberlandeplatz wie in der Stilvorlage
+        b.color(0x4a4f55);
+        b.cylinder(cx, cz, h, h + 0.25, Math.min(rw, rd) * 1.6, 16);
+        b.color(0xf2f2ee);
+        b.cylinder(cx, cz, h + 0.25, h + 0.27, Math.min(rw, rd) * 1.35, 24, true);
+        b.color(0x4a4f55);
+        b.cylinder(cx, cz, h + 0.27, h + 0.29, Math.min(rw, rd) * 1.2, 24, true);
+        b.color(0xf2f2ee);
+        const hs = Math.min(rw, rd) * 0.55;
+        b.box(cx - hs, h + 0.29, cz - hs, cx - hs * 0.6, h + 0.31, cz + hs);
+        b.box(cx + hs * 0.6, h + 0.29, cz - hs, cx + hs, h + 0.31, cz + hs);
+        b.box(cx - hs * 0.6, h + 0.29, cz - hs * 0.15, cx + hs * 0.6, h + 0.31, cz + hs * 0.15);
+      } else {
+        b.color(PAL.roofParapet);
+        b.box(cx - rw, h, cz - rd, cx + rw, h + 1.0, cz + rd);
+        b.color(0x9a9da1);
+        b.box(cx - rw * 0.5, h + 1.0, cz - rd * 0.5, cx + rw * 0.2, h + 1.4, cz + rd * 0.3);
+      }
+      break;
+    }
+    case 'church': {
+      const x0 = bld.x0, z0 = bld.y0, x1 = bld.x1 + 1, z1 = bld.y1 + 1;
+      const nh = 3.2;
+      b.color(PAL.churchWall);
+      b.box(x0 + 0.3, 0, z0 + 2.2, x1 - 0.3, nh, z1 - 0.2);
+      b.color(PAL.churchRoof);
+      b.gable(x0 + 0.15, z0 + 2.05, x1 - 0.15, z1 - 0.05, nh, 2.2, false, PAL.churchWall);
+      // Turm an der Nordseite
+      const tx = (x0 + x1) / 2;
+      b.color(PAL.churchWall);
+      b.box(tx - 1.0, 0, z0 + 0.2, tx + 1.0, 8.5, z0 + 2.2);
+      b.color(PAL.window);
+      for (const yy of [2.5, 5.5, 7.4]) b.wallQuad('pz', z0 + 2.2, tx - 0.25, tx + 0.25, yy, yy + 0.8);
+      b.color(PAL.churchRoof);
+      b.gable(tx - 1.05, z0 + 0.15, tx + 1.05, z0 + 2.25, 8.5, 3.2, true, PAL.churchRoof);
+      b.color(PAL.window);
+      for (let zz = z0 + 3; zz < z1 - 0.6; zz += 1.4) {
+        b.wallQuad('px', x1 - 0.3, zz, zz + 0.5, 0.8, 2.4);
+        b.wallQuad('nx', x0 + 0.3, zz, zz + 0.5, 0.8, 2.4);
+      }
+      break;
+    }
+    case 'garage': {
+      for (const t of bld.tiles) {
+        const tx = t % w, ty = (t / w) | 0;
+        const faces = exteriorFaces(world, bld, tx, ty);
+        b.color(PAL.garage);
+        b.box(tx, 0, ty, tx + 1, h, ty + 1, faces | FACE.PY);
+        for (const sd of SIDES) {
+          if (!(faces & sd.face) || !walkableNeighbor(world, tx, ty, sd.dx, sd.dy)) continue;
+          const [a0, a1] = sideRange(sd.side, tx, ty);
+          b.color(PAL.gate);
+          b.wallQuad(sd.side, sideFixed(sd.side, tx, ty), a0 + 0.1, a1 - 0.1, 0.02, h - 0.25);
+        }
+      }
+      break;
+    }
+    case 'subway': {
+      // U-Bahn-Eingang: Treppenabgang mit Dach und blauem Schild
+      const x0 = bld.x0 + 0.2, z0 = bld.y0 + 0.2, x1 = bld.x1 + 0.8, z1 = bld.y1 + 0.8;
+      b.color(0x3a3f45);
+      b.box(x0, 0, z0, x1, 0.12, z1);
+      b.color(0x1e2226);
+      b.box(x0 + 0.25, 0.12, z0 + 0.25, x1 - 0.25, 0.13, z1 - 0.25);
+      b.color(PAL.shelterFrame);
+      for (const [px, pz] of [[x0, z0], [x1 - 0.08, z0], [x0, z1 - 0.08], [x1 - 0.08, z1 - 0.08]]) b.box(px, 0, pz, px + 0.08, 1.1, pz + 0.08);
+      b.color(PAL.glass);
+      b.box(x0 - 0.05, 1.1, z0 - 0.05, x1 + 0.05, 1.18, z1 + 0.05);
+      b.color(PAL.shelterFrame);
+      b.box(x1 + 0.1, 0, z1 - 0.1, x1 + 0.18, 2.2, z1 - 0.02);
+      b.color(0x2357a8);
+      b.box(x1 - 0.1, 1.8, z1 - 0.12, x1 + 0.46, 2.36, z1);
+      b.color(0xffffff);
+      b.box(x1 + 0.0, 1.88, z1 + 0.0, x1 + 0.07, 2.28, z1 + 0.01);
+      b.box(x1 + 0.29, 1.88, z1 + 0.0, x1 + 0.36, 2.28, z1 + 0.01);
+      b.box(x1 + 0.0, 1.88, z1 + 0.0, x1 + 0.36, 1.95, z1 + 0.01);
+      break;
+    }
     case 'fountain': {
       const x0 = bld.x0 + 0.1, z0 = bld.y0 + 0.1, x1 = bld.x1 + 0.9, z1 = bld.y1 + 0.9;
       const t = 0.18, rh = 0.38;
@@ -488,7 +630,7 @@ export function buildCity(world: World): CityMeshes {
   // Verkaufsplätze als dezente Bodenmarkierung
   for (const s of world.spots) {
     const b = batchers[Math.floor(s.y / cs) * cw + Math.floor(s.x / cs)];
-    b.color(s.parking ? PAL.spotParking : PAL.spot);
+    b.color(PAL.spot);
     const y = H_SIDEWALK + 0.006;
     const x0 = s.x + 0.08, z0 = s.y + 0.08, x1 = s.x + 0.92, z1 = s.y + 0.92, t = 0.07;
     b.flat(x0, z0, x1, z0 + t, y);
@@ -577,3 +719,48 @@ export function buildCity(world: World): CityMeshes {
 }
 
 export { H_SIDEWALK, H_GREEN };
+
+const FLAT_ROOF_STYLES = new Set(['brick', 'plaster', 'shop', 'store', 'tower', 'uni', 'mensa', 'office', 'garage']);
+
+/**
+ * Rote Markierung für Viertel der Gemüsegang: getönter Boden, getönte Flachdächer und eine
+ * Grenzlinie. Pro Viertel ein Mesh mit eigenem Material, damit es nach der Eroberung ausblenden kann.
+ */
+export function buildDistrictOverlays(world: World): Mesh[] {
+  const res: Mesh[] = [];
+  for (let d = 0; d < world.districtTiles.length; d++) {
+    const b = new Batcher().color(PAL.gangRed);
+    const wall = new Batcher().color(PAL.gangRed);
+    for (const t of world.districtTiles[d]) {
+      const x = t % world.w;
+      const y = (t / world.w) | 0;
+      const tt = world.tiles[t];
+      if (tt === TILE.BUILDING) {
+        const bld = world.buildings[world.buildingOf[t]];
+        if (bld && FLAT_ROOF_STYLES.has(bld.style)) b.flat(x, y, x + 1, y + 1, bld.height + 0.03);
+        continue;
+      }
+      const h = tt === TILE.ROAD || tt === TILE.CROSSWALK ? 0.02 : 0.09;
+      b.flat(x, y, x + 1, y + 1, h);
+      // Grenze zu einem anderen Viertel
+      const other = (nx: number, ny: number) =>
+        nx >= 0 && ny >= 0 && nx < world.w && ny < world.h && world.district[ny * world.w + nx] !== d;
+      const wh = 0.55;
+      if (other(x + 1, y)) wall.quad(x + 1, 0, y, x + 1, wh, y, x + 1, wh, y + 1, x + 1, 0, y + 1);
+      if (other(x - 1, y)) wall.quad(x, 0, y + 1, x, wh, y + 1, x, wh, y, x, 0, y);
+      if (other(x, y + 1)) wall.quad(x + 1, 0, y + 1, x + 1, wh, y + 1, x, wh, y + 1, x, 0, y + 1);
+      if (other(x, y - 1)) wall.quad(x, 0, y, x, wh, y, x + 1, wh, y, x + 1, 0, y);
+    }
+    const mat = new MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.3, depthWrite: false });
+    const mesh = new Mesh(b.build(), mat);
+    const wallMat = new MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false, side: DoubleSide });
+    const border = new Mesh(wall.build(), wallMat);
+    mesh.add(border);
+    mesh.renderOrder = 2;
+    border.renderOrder = 2;
+    mesh.matrixAutoUpdate = false;
+    border.matrixAutoUpdate = false;
+    res.push(mesh);
+  }
+  return res;
+}

@@ -1,9 +1,11 @@
 # Obst-Tycoon: Projektregeln
 
-Die vollständige Spezifikation steht in `SPEC.md`. Arbeite die Meilensteine aus Abschnitt 14 der Reihe nach ab.
-Am Ende jedes Meilensteins: Spiel spielbar, `npm test` grün, `npm run build` ohne Fehler, `npm run lint` ohne Fehler, Git-Commit.
+Die Spezifikation steht in `SPEC.md` (Version 2, vereinfachtes Spiel: Kisten, selbstständige Verkäufer, Eroberung der Viertel im Würfelduell).
+Die ursprüngliche, ausführlichere Fassung liegt in `docs/SPEC-v1.md` und gilt nur noch für Technik und Projektregeln.
+Leitlinie des Auftraggebers: einfach, sofort verständlich, ohne überladene Oberfläche, soll Spaß machen.
+Vor jedem Commit: `npm test` grün, `npm run build` und `npm run lint` ohne Fehler.
 
-## Regeln (SPEC.md Abschnitt 2)
+## Regeln (aus der ersten Spezifikation, Abschnitt 2)
 
 - UI-Texte und Code-Kommentare auf Deutsch mit echten Umlauten (ä, ö, ü, ß). Bezeichner im Code auf Englisch.
 - Keine Emojis, an keiner Stelle. Symbole sind eigene SVG-Icons (`src/ui/icons.tsx`).
@@ -31,6 +33,8 @@ Am Ende jedes Meilensteins: Spiel spielbar, `npm test` grün, `npm run build` oh
 - `src/data/` `balance.ts`, `map.ts` (ASCII-Karte plus Listen), Namen.
 - `src/save/` Speicherformat mit Versionsnummer und Migrationen, IndexedDB über idb-keyval.
 - `scripts/` Balancing-Bot (`npm run balance`) und Screenshot-Prüfung (`npm run shots`).
+- Wichtige Dateien: `src/sim/dealers.ts` (Verkäufer-KI), `src/sim/battle.ts` und `src/sim/odds.ts` (Würfelduell),
+  `src/sim/story.ts` (Aufträge), `src/render/labels.ts` (Schilder und Plus in der Welt), `src/ui/Hud.tsx` (Oberfläche).
 
 ## Befehle
 
@@ -38,7 +42,7 @@ Am Ende jedes Meilensteins: Spiel spielbar, `npm test` grün, `npm run build` oh
 - `npm test` Vitest
 - `npm run lint` ESLint
 - `npm run build` Typprüfung und Build nach `dist/`
-- `npm run balance` Balancing-Bot über 60 Spieltage
+- `npm run balance` Balancing-Bot über 40 Spieltage
 - `npm run shots` Screenshots mit Playwright (Software-WebGL)
 
 ## Veröffentlichung

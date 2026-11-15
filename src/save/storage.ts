@@ -2,7 +2,7 @@
 import { createStore, del, get, set } from 'idb-keyval';
 import { SAVE } from '../data/balance';
 import type { GameState } from '../sim/types';
-import { dateText, clockText } from '../sim/time';
+import { clockText } from '../sim/time';
 import { deserialize, serialize, type SaveFile } from './format';
 
 export type SlotId = 'auto' | 'slot1' | 'slot2' | 'slot3';
@@ -26,7 +26,7 @@ export interface SlotInfo {
 }
 
 export function stateLabel(state: GameState): string {
-  return `${dateText(state.day)}, ${clockText(state)}`;
+  return `Tag ${state.day + 1}, ${clockText(state)}, ${Math.round(state.money)} €`;
 }
 
 export async function saveToSlot(slot: SlotId, state: GameState): Promise<void> {

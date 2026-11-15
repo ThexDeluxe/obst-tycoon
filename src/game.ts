@@ -1,15 +1,16 @@
 // Steuert Simulation, Darstellung und Oberfläche: feste Tickrate mit Akkumulator,
-// Pause bei verborgenem Tab, Autosave.
+// Pause bei verborgenem Tab und während eines Würfelduells, Autosave.
 import { CAMERA, TIME } from './data/balance';
 import { GameView } from './render/view';
 import { PointerInput } from './render/input';
 import { saveToSlot } from './save/storage';
 import { enqueue, type Command } from './sim/commands';
-import { createStepOutput, flushCommands, step, type StepOutput } from './sim/step';
+import { createStepOutput, flushCommands, isPaused, step, type StepOutput } from './sim/step';
+import { STORY } from './sim/story';
 import type { GameState } from './sim/types';
 import { getWorld, type World } from './sim/world';
-import { assignFor, notices, reportHidden, screen, selection, settings, speedIndex, uiTick, type Settings } from './ui/store';
 import { moneyExact } from './ui/format';
+import { attackTarget, notices, screen, selectedDealer, settings, sheet, speedIndex, uiTick, type Settings } from './ui/store';
 
 export class Game {
   readonly world: World;
@@ -24,22 +25,35 @@ export class Game {
   private keys = new Set<string>();
   private hiddenSpeed: number | null = null;
   private input: PointerInput;
+  private lastMessageId = 0;
+  private lastStory = -1;
   // Messwerte für die Debug-Anzeige
   fps = 0;
   tps = 0;
   private fpsFrames = 0;
   private fpsTime = 0;
   private tickCount = 0;
-  /** Wird nach jedem Tagesabschluss aufgerufen */
-  onDayEnd: (() => void) | null = null;
   /** Hintergrundspiel hinter dem Hauptmenü (wird nie gespeichert) */
   demo = false;
+  /** Zusätzliche Tastenkürzel der Oberfläche */
+  keyHook: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement, state: GameState) {
     this.world = getWorld();
     this.state = state;
     const s = settings.value;
-    this.view = new GameView(canvas, this.world, { shadows: s.shadows, quality: s.quality }, document.getElementById('floaters') ?? document.body);
+    this.view = new GameView(
+      canvas,
+      this.world,
+      { shadows: s.shadows, quality: s.quality },
+      document.getElementById('floaters') ?? document.body,
+      document.getElementById('labels') ?? document.body,
+    );
+    this.view.labels.handlers = {
+      onDistrict: (i) => this.openDistrict(i),
+      onShelf: () => this.command({ type: 'buyShelf' }),
+      onWarehouse: () => (sheet.value = 'fruit'),
+    };
     this.input = new PointerInput(canvas, this.view.rig, {
       onTap: (x, y) => this.onTap(x, y),
       onDoubleTap: (x, y) => this.onDoubleTap(x, y),
@@ -74,42 +88,14 @@ export class Game {
     this.autosaveTimer = 0;
     this.view.selectedPedId = null;
     this.view.rig.follow = null;
-    this.view.rig.lookAt(this.world.warehouse.x + 6, this.world.warehouse.y + 2);
+    this.view.focusWarehouse();
     this.view.floaters.clear();
     this.lastMessageId = state.messages.length ? state.messages[state.messages.length - 1].id : 0;
-    selection.value = null;
-    assignFor.value = null;
-    reportHidden.value = false;
+    this.lastStory = state.story;
+    selectedDealer.value = null;
+    attackTarget.value = null;
+    sheet.value = null;
     notices.value = [];
-  }
-  private lastMessageId = 0;
-
-  /** Neue Meldungen aus der Simulation an die Oberfläche geben */
-  private pollMessages(): void {
-    const msgs = this.state.messages;
-    if (!msgs.length || msgs[msgs.length - 1].id <= this.lastMessageId) return;
-    const fresh = msgs.filter((m) => m.id > this.lastMessageId);
-    this.lastMessageId = msgs[msgs.length - 1].id;
-    if (this.demo) return;
-    const now = performance.now();
-    // Der Tagesabschluss hat sein eigenes Fenster und braucht keine Meldung
-    const add = fresh.filter((m) => m.kind !== 'report').map((m) => ({ id: m.id, kind: m.kind, text: m.text, x: m.x, y: m.y, time: now }));
-    if (!add.length) return;
-    notices.value = [...notices.value, ...add].slice(-4);
-  }
-
-  /** Kamera zu einem Ort fahren */
-  focus(x: number, y: number): void {
-    this.view.rig.follow = null;
-    this.view.rig.lookAt(x, y);
-  }
-
-  /** Kamera folgt einer eigenen Person */
-  followPerson(id: number): void {
-    this.view.rig.follow = () => {
-      const p = this.state.staff.find((q) => q.id === id);
-      return p ? { x: p.x, y: p.y } : null;
-    };
   }
 
   applySettings(s: Settings): void {
@@ -118,6 +104,10 @@ export class Game {
 
   command(cmd: Command): void {
     enqueue(this.state, cmd);
+    // Sofort ausführen, damit die Oberfläche ohne Verzögerung reagiert
+    flushCommands(this.state, this.world, this.out);
+    this.pollMessages();
+    uiTick.value++;
   }
 
   setSpeed(i: number): void {
@@ -138,6 +128,49 @@ export class Game {
     saveToSlot('auto', this.state).catch(() => {
       /* Speichern im Hintergrund darf das Spiel nicht stören */
     });
+  }
+
+  /** Viertel antippen: bei der Gang den Angriff anbieten */
+  openDistrict(i: number): void {
+    if (this.state.districts[i]?.owner !== 'gang') return;
+    attackTarget.value = i;
+    sheet.value = 'attack';
+    selectedDealer.value = null;
+  }
+
+  /** Kamera zu einem Ort fahren */
+  focus(x: number, y: number): void {
+    this.view.rig.follow = null;
+    this.view.rig.lookAt(x, y);
+  }
+
+  followDealer(id: number): void {
+    this.view.rig.follow = () => {
+      const d = this.state.dealers.find((q) => q.id === id);
+      return d ? { x: d.x, y: d.y } : null;
+    };
+  }
+
+  private pollMessages(): void {
+    const msgs = this.state.messages;
+    if (!msgs.length || msgs[msgs.length - 1].id <= this.lastMessageId) return;
+    const fresh = msgs.filter((m) => m.id > this.lastMessageId);
+    this.lastMessageId = msgs[msgs.length - 1].id;
+    if (this.demo) return;
+    const now = performance.now();
+    const add = fresh.map((m) => ({ id: m.id, kind: m.kind, text: m.text, x: m.x, y: m.y, time: now }));
+    notices.value = [...notices.value, ...add].slice(-3);
+  }
+
+  /** Neue Aufträge: Kamera dorthin, wo es weitergeht */
+  private onStoryChange(): void {
+    const step = STORY[this.state.story];
+    if (!step || this.demo) return;
+    if (step.hint === 'shelf') this.view.focusWarehouse();
+    if (step.hint === 'district' && step.district !== undefined) {
+      const [x, y] = this.world.labels[step.district];
+      this.focus(x, y + 6);
+    }
   }
 
   private onResize = () => this.view.resize();
@@ -193,45 +226,37 @@ export class Game {
     }
     this.keyHook?.(e);
   };
-  /** Zusätzliche Tastenkürzel der Oberfläche */
-  keyHook: ((e: KeyboardEvent) => void) | null = null;
 
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
 
   private onTap(x: number, y: number): void {
-    // Zuweisungsmodus: Tippen auf einen Verkaufsplatz weist ihn zu
-    if (assignFor.value !== null) {
-      const spot = this.view.spotAt(x, y, 1.2);
-      if (spot !== null) {
-        this.command({ type: 'assign', personId: assignFor.value, spot });
-        selection.value = { kind: 'person', id: assignFor.value };
-      }
-      assignFor.value = null;
-      return;
-    }
-    const person = this.view.nearestStaff(x, y, 30);
-    if (person !== null) {
-      selection.value = { kind: 'person', id: person };
+    const dealer = this.view.nearestDealer(x, y, 30);
+    if (dealer !== null) {
+      selectedDealer.value = dealer;
+      sheet.value = null;
       this.view.selectedPedId = null;
       return;
     }
-    const spot = this.view.spotAt(x, y);
-    if (spot !== null) {
-      selection.value = { kind: 'spot', index: spot };
-      this.view.selectedPedId = null;
+    selectedDealer.value = null;
+    const d = this.view.districtAt(x, y);
+    if (d !== null && this.state.districts[d].owner === 'gang') {
+      this.openDistrict(d);
       return;
     }
-    selection.value = null;
+    if (sheet.value) {
+      sheet.value = null;
+      return;
+    }
     const ped = this.view.nearestPed(x, y, 26);
     this.view.selectedPedId = ped;
     if (ped === null) this.view.rig.follow = null;
   }
 
   private onDoubleTap(x: number, y: number): void {
-    const person = this.view.nearestStaff(x, y, 32);
-    if (person !== null) {
-      selection.value = { kind: 'person', id: person };
-      this.followPerson(person);
+    const dealer = this.view.nearestDealer(x, y, 32);
+    if (dealer !== null) {
+      selectedDealer.value = dealer;
+      this.followDealer(dealer);
       return;
     }
     const ped = this.view.nearestPed(x, y, 30);
@@ -266,7 +291,8 @@ export class Game {
     const speed = inMenu ? (this.demo ? 1 : 0) : TIME.speeds[speedIndex.value];
     const out = this.out;
     out.dayEnded = false;
-    if (speed > 0 && this.state.phase === 'day') {
+    const running = speed > 0 && !isPaused(this.state);
+    if (running) {
       this.acc += dt * speed * TIME.ticksPerSecond;
       let n = Math.floor(this.acc);
       if (n > TIME.maxTicksPerFrame) {
@@ -276,17 +302,12 @@ export class Game {
       for (let i = 0; i < n; i++) {
         step(this.state, this.world, out);
         this.tickCount++;
-        if (this.state.phase !== 'day') {
-          this.acc = n;
-          break;
-        }
       }
       this.acc -= n;
     } else {
       flushCommands(this.state, this.world, out);
     }
-    const alpha = this.state.phase === 'day' && speed > 0 ? Math.min(1, Math.max(0, this.acc)) : 1;
-    // Umsatzzahlen über den Ständen
+    const alpha = running ? Math.min(1, Math.max(0, this.acc)) : 1;
     if (out.sales.length) {
       if (settings.value.saleNumbers && !this.demo && !inMenu) {
         const start = Math.max(0, out.sales.length - 3);
@@ -297,18 +318,17 @@ export class Game {
       }
       out.sales.length = 0;
     }
-    const sel = selection.value;
-    this.view.highlight.personId = sel?.kind === 'person' ? sel.id : assignFor.value;
-    this.view.highlight.spot = sel?.kind === 'spot' ? sel.index : null;
-    this.view.highlight.assigning = assignFor.value !== null;
+    const story = STORY[this.state.story];
+    this.view.hints.dealerId = selectedDealer.value;
+    this.view.hints.district = !inMenu && story?.hint === 'district' ? (story.district ?? null) : null;
+    this.view.hints.shelf = !inMenu && story?.hint === 'shelf';
+    this.view.hints.labels = !inMenu;
     this.view.frame(this.state, alpha, dt);
-
-    if (out.dayEnded) {
-      reportHidden.value = false;
-      if (this.demo) this.command({ type: 'nextDay' });
-      this.autosave();
-      this.onDayEnd?.();
+    if (this.state.story !== this.lastStory) {
+      if (this.lastStory >= 0) this.onStoryChange();
+      this.lastStory = this.state.story;
     }
+    if (out.dayEnded) this.autosave();
 
     // Messwerte
     this.fpsFrames++;

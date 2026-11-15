@@ -99,14 +99,20 @@ export function SettingsPanel() {
             <button class="btn small" onClick={() => g.command({ type: 'debugSkipHours', hours: 4 })}>
               +4 Stunden
             </button>
-            <button class="btn small" onClick={() => g.command({ type: 'debugSkipHours', hours: 24 })}>
-              Bis Tagesende
+            <button class="btn small" onClick={() => g.command({ type: 'debugSkipHours', hours: 16 })}>
+              +1 Tag
             </button>
-            <button class="btn small" onClick={() => g.command({ type: 'debugSetMoney', amount: g.state.money + 5000 })}>
+            <button class="btn small" onClick={() => g.command({ type: 'debugMoney', amount: 5000 })}>
               +5.000 €
             </button>
-            <button class="btn small" onClick={() => g.command({ type: 'debugSetLevel', level: g.state.level + 1 })}>
-              Ruf-Stufe +1
+            <button
+              class="btn small"
+              onClick={() => {
+                const i = g.state.districts.findIndex((d) => d.owner === 'gang');
+                if (i >= 0) g.command({ type: 'debugConquer', district: i });
+              }}
+            >
+              Viertel erobern
             </button>
           </div>
         </>

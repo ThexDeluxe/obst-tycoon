@@ -48,7 +48,7 @@ export function MainMenu({ onNew, onLoad }: Props) {
       <div class="menu-card">
         <div class="menu-title">
           <h1>Obst-Tycoon</h1>
-          <p>Obsthandel mit Straßenverkauf. Wirtschaftssimulation.</p>
+          <p>Vom Untergrund ins Bankenviertel: Kaufe Obst kistenweise, schick Verkäufer auf die Straße und erobere die Stadt von der Gemüsegang.</p>
         </div>
         {mode === 'main' && (
           <div class="menu-buttons">
@@ -56,7 +56,7 @@ export function MainMenu({ onNew, onLoad }: Props) {
               Neues Spiel
             </button>
             <button class="btn" disabled={!latest} onClick={() => latest && load(latest.slot)}>
-              Fortsetzen{latest ? ` (${latest.label})` : ''}
+              Weiterspielen{latest ? ` (${latest.label})` : ''}
             </button>
             <button class="btn" onClick={() => setMode('load')}>
               Laden

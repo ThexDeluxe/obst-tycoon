@@ -33,6 +33,8 @@ describe('Passanten und Verkehr', () => {
     const b = createInitialState(world, { seed: 5, ambient: false });
     const out = createStepOutput();
     const s0 = a.vehicles[0].s;
+    a.queue.push({ type: 'buyCrate', fruit: 'apple', count: 3 });
+    b.queue.push({ type: 'buyCrate', fruit: 'apple', count: 3 });
     for (let i = 0; i < 200; i++) {
       step(a, world, out);
       step(b, world, out);

@@ -2,8 +2,6 @@
 import { signal } from '@preact/signals';
 import { SAVE } from '../data/balance';
 
-export type TabId = 'staff' | 'market' | 'warehouse' | 'equipment' | 'districts' | 'goal' | 'reports' | 'settings';
-
 export interface Settings {
   shadows: boolean;
   quality: 'low' | 'medium' | 'high';
@@ -51,17 +49,19 @@ export function updateSettings(patch: Partial<Settings>): void {
 /** Wird viermal pro Sekunde erhöht; die Oberfläche liest dann den Spielzustand neu. */
 export const uiTick = signal(0);
 export const screen = signal<'menu' | 'game'>('menu');
-export const activeTab = signal<TabId | null>(null);
 export const speedIndex = signal(1);
 export const toast = signal<{ text: string; kind: 'info' | 'error'; id: number } | null>(null);
 export const portraitDismissed = signal(false);
 
-export type Selection = { kind: 'person'; id: number } | { kind: 'spot'; index: number } | null;
-export const selection = signal<Selection>(null);
-/** Person, für die gerade ein Verkaufsplatz gewählt wird */
-export const assignFor = signal<number | null>(null);
-/** Tagesbericht ausgeblendet, damit noch bestellt werden kann */
-export const reportHidden = signal(false);
+/** Geöffnetes Blatt am unteren Rand */
+export type SheetId = 'fruit' | 'dealers' | 'fighters' | 'attack' | 'settings';
+export const sheet = signal<SheetId | null>(null);
+/** Viertel, das im Angriffsblatt gezeigt wird */
+export const attackTarget = signal<number | null>(null);
+/** Angetippter Verkäufer */
+export const selectedDealer = signal<number | null>(null);
+/** Abschlussbild wurde schon gezeigt */
+export const winShown = signal(false);
 
 export interface Notice {
   id: number;

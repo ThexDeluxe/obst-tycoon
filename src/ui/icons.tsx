@@ -193,3 +193,36 @@ export const IconHome = (p: P) => (
     <path d="M4 11l8-7 8 7M6 9.5V20h12V9.5" />
   </Svg>
 );
+export const IconCrate = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 8h18v12H3z" />
+    <path d="M3 8l2-4h14l2 4" />
+    <path d="M8 12v5M12 12v5M16 12v5" />
+  </Svg>
+);
+export const IconFist = (p: P) => (
+  <Svg {...p}>
+    <path d="M7 11V7.5a1.5 1.5 0 0 1 3 0V11M10 10V6.5a1.5 1.5 0 0 1 3 0V10M13 10V7.5a1.5 1.5 0 0 1 3 0V12" />
+    <path d="M16 11a1.5 1.5 0 0 1 3 0v3a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-3l-2-3.5a1.5 1.5 0 0 1 2.6-1.5L9 14" />
+  </Svg>
+);
+export const IconUserPlus = (p: P) => (
+  <Svg {...p}>
+    <circle cx="10" cy="8" r="3.4" />
+    <path d="M3.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+    <path d="M19 7v6M16 10h6" />
+  </Svg>
+);
+export const IconLock = (p: P) => (
+  <Svg {...p}>
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </Svg>
+);
+export const IconTarget = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="4.5" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" />
+  </Svg>
+);

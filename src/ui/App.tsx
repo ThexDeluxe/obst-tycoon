@@ -1,20 +1,19 @@
 // Wurzel der Oberfläche.
 import { useEffect } from 'preact/hooks';
 import { currentGame } from '../game';
-import { getWorld } from '../sim/world';
 import { createInitialState } from '../sim/state';
 import type { GameState } from '../sim/types';
-import { CameraControls, DayEndDialog, DebugOverlay, Notices, PortraitHint, SidePanel, TabRail, TABS, Toast, TopBar } from './Hud';
-import { AssignBanner, SelectionCard } from './Selection';
+import { getWorld } from '../sim/world';
+import { ActionBar, BattleModal, CameraControls, DealerCard, DebugOverlay, Notices, PortraitHint, Sheet, Toast, TopBar, WinModal } from './Hud';
 import { MainMenu } from './MainMenu';
-import { activeTab, assignFor, screen, selection, settings } from './store';
+import { screen, selectedDealer, settings, sheet, winShown } from './store';
 
 function startGame(state: GameState): void {
   const g = currentGame();
   if (!g) return;
   g.load(state, false);
   g.setSpeed(1);
-  activeTab.value = null;
+  winShown.value = state.won;
   screen.value = 'game';
 }
 
@@ -25,14 +24,14 @@ export function App() {
     g.keyHook = (e) => {
       if (screen.value !== 'game') return;
       if (e.code === 'Escape') {
-        if (assignFor.value !== null) assignFor.value = null;
-        else if (selection.value) selection.value = null;
-        else activeTab.value = null;
+        if (sheet.value) sheet.value = null;
+        else selectedDealer.value = null;
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const tab = TABS.find((t) => `Key${t.key}` === e.code);
-      if (tab) activeTab.value = activeTab.value === tab.id ? null : tab.id;
+      const keys: Record<string, 'fruit' | 'dealers' | 'fighters'> = { KeyO: 'fruit', KeyV: 'dealers', KeyK: 'fighters' };
+      const id = keys[e.code];
+      if (id) sheet.value = sheet.value === id ? null : id;
     };
   }, []);
   void settings.value;
@@ -51,14 +50,14 @@ export function App() {
   return (
     <>
       <TopBar />
-      <TabRail />
-      <SidePanel />
-      <SelectionCard />
-      <AssignBanner />
       <Notices />
+      <Sheet />
+      <DealerCard />
+      <ActionBar />
       <CameraControls />
       <DebugOverlay />
-      <DayEndDialog />
+      <BattleModal />
+      <WinModal />
       <Toast />
       <PortraitHint />
     </>

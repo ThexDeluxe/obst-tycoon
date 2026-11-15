@@ -23,7 +23,7 @@ export interface FigureInput {
   skin: number;
   /** Westenfarbe, 0 = keine */
   vest: number;
-  /** Bauchladen vor dem Körper */
+  /** Kiste vor dem Körper */
   tray: boolean;
   trayColor: number;
 }
@@ -58,7 +58,8 @@ export class FigureLayer {
     const torsoGeo = new BoxGeometry(0.22, TORSO_H, 0.13);
     const headGeo = new BoxGeometry(HEAD, HEAD, HEAD);
     const vestGeo = new BoxGeometry(0.235, 0.17, 0.145);
-    const trayGeo = new BoxGeometry(0.26, 0.06, 0.16);
+    // Getragene Kiste vor dem Körper
+    const trayGeo = new BoxGeometry(0.26, 0.17, 0.2);
     this.legs = new InstancedMesh(legGeo, mat, capacity * 2);
     this.torso = new InstancedMesh(torsoGeo, mat, capacity);
     this.head = new InstancedMesh(headGeo, mat, capacity);
@@ -117,8 +118,8 @@ export class FigureLayer {
     }
     if (f.tray) {
       const j = this.trayCount++;
-      m.compose(p.set(f.x, hip + 0.04 * sc, f.z), q, s);
-      m2.makeTranslation(0, 0, 0.15);
+      m.compose(p.set(f.x, hip + 0.1 * sc, f.z), q, s);
+      m2.makeTranslation(0, 0, 0.17);
       m.multiply(m2);
       this.tray.setMatrixAt(j, m);
       this.tray.setColorAt(j, c.setHex(f.trayColor));

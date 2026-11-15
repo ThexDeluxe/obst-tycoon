@@ -2,15 +2,11 @@
 import {
   Color,
   DirectionalLight,
-  DynamicDrawUsage,
   HemisphereLight,
-  InstancedMesh,
-  Matrix4,
   Mesh,
   MeshBasicMaterial,
   PCFShadowMap,
   Plane,
-  Quaternion,
   Raycaster,
   RingGeometry,
   Scene,
@@ -18,29 +14,31 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { RENDER, SPOT } from '../data/balance';
+import { RENDER } from '../data/balance';
+import { capacity, isAttackable, shelfCost } from '../sim/selectors';
 import type { GameState } from '../sim/types';
 import type { World } from '../sim/world';
 import { CameraRig } from './camera';
-import { buildCity, H_SIDEWALK, type CityMeshes } from './city';
+import { buildCity, buildDistrictOverlays, type CityMeshes } from './city';
 import { FigureLayer, type FigureInput } from './figures';
 import { Floaters } from './floaters';
+import { WorldLabels, type LabelState } from './labels';
 import { CLOTHES, PAL, PANTS, SKIN } from './palette';
-import { StaffLayer } from './staff';
+import { PeopleLayer } from './people';
 import { VehicleLayer } from './vehicles';
-import { WarehouseView, type CrateView } from './warehouse';
+import { WarehouseView } from './warehouse';
 
 export interface ViewSettings {
   shadows: boolean;
   quality: 'low' | 'medium' | 'high';
 }
 
-/** Was die Oberfläche hervorheben möchte */
-export interface ViewHighlight {
-  personId: number | null;
-  spot: number | null;
-  /** Zuweisungsmodus: alle Plätze markieren */
-  assigning: boolean;
+/** Hinweise der Oberfläche an die Darstellung */
+export interface ViewHints {
+  dealerId: number | null;
+  district: number | null;
+  shelf: boolean;
+  labels: boolean;
 }
 
 const tmpV = new Vector3();
@@ -50,16 +48,16 @@ export class GameView {
   readonly scene = new Scene();
   readonly rig: CameraRig;
   private sun: DirectionalLight;
-  private hemi: HemisphereLight;
   private city: CityMeshes;
   readonly warehouse: WarehouseView;
   private figures: FigureLayer;
-  private staff: StaffLayer;
+  private people: PeopleLayer;
   private vehicles: VehicleLayer;
+  private overlays: Mesh[];
+  private overlayAlpha: number[];
   private selectRing: Mesh;
-  private spotRings: InstancedMesh;
-  private spotSelect: Mesh;
   readonly floaters: Floaters;
+  readonly labels: WorldLabels;
   private raycaster = new Raycaster();
   private ground = new Plane(new Vector3(0, 1, 0), 0);
   private fig: FigureInput = {
@@ -67,25 +65,20 @@ export class GameView {
   };
   /** Ausgewählter Passant (nur zum Verfolgen) */
   selectedPedId: number | null = null;
-  highlight: ViewHighlight = { personId: null, spot: null, assigning: false };
+  hints: ViewHints = { dealerId: null, district: null, shelf: false, labels: true };
   private lastState: GameState | null = null;
   private lastAlpha = 0;
   private crateTimer = 0;
-  private m = new Matrix4();
-  private q = new Quaternion();
-  private c = new Color();
-  private one = new Vector3(1, 1, 1);
   stats = { drawCalls: 0, triangles: 0 };
 
-  constructor(readonly canvas: HTMLCanvasElement, readonly world: World, settings: ViewSettings, overlay: HTMLElement) {
+  constructor(readonly canvas: HTMLCanvasElement, readonly world: World, settings: ViewSettings, floaterRoot: HTMLElement, labelRoot: HTMLElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.shadowMap.type = PCFShadowMap;
     this.scene.background = new Color(PAL.sky);
     this.rig = new CameraRig(world.w, world.h);
-    this.rig.lookAt(world.warehouse.x + 6, world.warehouse.y + 2);
+    this.focusWarehouse();
 
-    this.hemi = new HemisphereLight(0xe4edf3, 0x8a8072, 1.35);
-    this.scene.add(this.hemi);
+    this.scene.add(new HemisphereLight(0xe4edf3, 0x8a8072, 1.35));
     this.sun = new DirectionalLight(0xfff2e0, 2.3);
     this.sun.shadow.mapSize.set(RENDER.shadowMapSize, RENDER.shadowMapSize);
     this.sun.shadow.bias = -0.0006;
@@ -96,33 +89,29 @@ export class GameView {
     this.scene.add(this.city.group);
     this.warehouse = new WarehouseView(world);
     this.scene.add(this.warehouse.group);
-    this.figures = new FigureLayer(900);
+    this.figures = new FigureLayer(1000);
     this.scene.add(this.figures.group);
-    this.staff = new StaffLayer(48);
-    this.scene.add(this.staff.group);
+    this.people = new PeopleLayer(world, 96);
+    this.scene.add(this.people.group);
     this.vehicles = new VehicleLayer(40);
     this.scene.add(this.vehicles.group);
+    this.overlays = buildDistrictOverlays(world);
+    this.overlayAlpha = this.overlays.map(() => -1);
+    for (const o of this.overlays) this.scene.add(o);
 
     this.selectRing = new Mesh(new RingGeometry(0.3, 0.38, 24), new MeshBasicMaterial({ color: 0x2f8f4e }));
     this.selectRing.rotation.x = -Math.PI / 2;
     this.selectRing.visible = false;
     this.scene.add(this.selectRing);
 
-    const ringGeo = new RingGeometry(0.5, 0.68, 4, 1, Math.PI / 4);
-    ringGeo.rotateX(-Math.PI / 2);
-    this.spotRings = new InstancedMesh(ringGeo, new MeshBasicMaterial({ color: 0xffffff }), world.spots.length);
-    this.spotRings.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.spotRings.setColorAt(0, this.c.setHex(0xffffff));
-    this.spotRings.visible = false;
-    this.spotRings.frustumCulled = false;
-    this.scene.add(this.spotRings);
-    this.spotSelect = new Mesh(new RingGeometry(0.55, 0.66, 4, 1, Math.PI / 4), new MeshBasicMaterial({ color: 0xffffff }));
-    this.spotSelect.rotation.x = -Math.PI / 2;
-    this.spotSelect.visible = false;
-    this.scene.add(this.spotSelect);
-
-    this.floaters = new Floaters(overlay);
+    this.floaters = new Floaters(floaterRoot);
+    this.labels = new WorldLabels(labelRoot);
     this.applySettings(settings);
+  }
+
+  focusWarehouse(): void {
+    const wh = this.world.warehouse;
+    this.rig.lookAt(wh.x + wh.w / 2 - 1, wh.y + wh.h / 2 + 1);
   }
 
   applySettings(s: ViewSettings): void {
@@ -132,7 +121,6 @@ export class GameView {
     this.renderer.shadowMap.enabled = s.shadows;
     this.sun.castShadow = s.shadows;
     this.renderer.shadowMap.needsUpdate = true;
-    // Materialien neu übersetzen, wenn Schatten umgeschaltet werden
     this.scene.traverse((o) => {
       const m = (o as Mesh).material;
       if (m && !Array.isArray(m)) m.needsUpdate = true;
@@ -149,9 +137,9 @@ export class GameView {
 
   private updateSun(): void {
     const t = this.rig.target;
-    this.sun.position.set(t.x - 18, 30, t.z + 10);
+    this.sun.position.set(t.x - 18, 34, t.z + 10);
     this.sun.target.position.set(t.x, 0, t.z);
-    const ext = Math.max(this.rig.visibleWidth, this.rig.visibleHeight) * 0.75 + 4;
+    const ext = Math.max(this.rig.visibleWidth, this.rig.visibleHeight) * 0.75 + 6;
     const cam = this.sun.shadow.camera;
     if (cam.right !== ext) {
       cam.left = -ext;
@@ -159,7 +147,7 @@ export class GameView {
       cam.top = ext;
       cam.bottom = -ext;
       cam.near = 1;
-      cam.far = 90;
+      cam.far = 120;
       cam.updateProjectionMatrix();
     }
   }
@@ -181,38 +169,23 @@ export class GameView {
     return f;
   }
 
-  private updateCrates(state: GameState): void {
-    const regular: CrateView[] = [];
-    const cooled: CrateView[] = [];
-    for (const c of state.crates) (c.cooled ? cooled : regular).push({ product: c.product, fill: c.units / 20 });
-    this.warehouse.updateCrates(regular, cooled);
+  /** Rote Markierung der Gang-Viertel; nach der Eroberung blendet sie langsam aus */
+  private updateOverlays(state: GameState, dt: number): void {
+    for (let i = 0; i < this.overlays.length; i++) {
+      const target = state.districts[i].owner === 'gang' ? 1 : 0;
+      let a = this.overlayAlpha[i];
+      if (a < 0) a = target;
+      else a += Math.sign(target - a) * Math.min(Math.abs(target - a), dt * 0.7);
+      this.overlayAlpha[i] = a;
+      const o = this.overlays[i];
+      o.visible = a > 0.001;
+      (o.material as MeshBasicMaterial).opacity = 0.3 * a;
+      const border = o.children[0] as Mesh;
+      (border.material as MeshBasicMaterial).opacity = 0.45 * a;
+    }
   }
 
-  private updateSpotMarkers(state: GameState): void {
-    const hl = this.highlight;
-    this.spotRings.visible = hl.assigning;
-    if (hl.assigning) {
-      // Pulsierende Markierung aller Verkaufsplätze
-      const pulse = 1 + 0.12 * Math.sin(performance.now() / 180);
-      this.one.set(pulse, 1, pulse);
-      for (const s of this.world.spots) {
-        let n = 0;
-        for (const p of state.staff) if (p.spot === s.index && p.id !== hl.personId) n++;
-        this.q.identity();
-        this.m.compose(tmpV.set(s.x + 0.5, H_SIDEWALK + 0.02, s.y + 0.5), this.q, this.one);
-        this.spotRings.setMatrixAt(s.index, this.m);
-        this.spotRings.setColorAt(s.index, this.c.setHex(n >= SPOT.maxOwnVendors ? 0xc0392b : n > 0 ? 0xd2a640 : 0x2f7d4a));
-      }
-      this.spotRings.instanceMatrix.needsUpdate = true;
-      if (this.spotRings.instanceColor) this.spotRings.instanceColor.needsUpdate = true;
-      this.one.set(1, 1, 1);
-    }
-    if (hl.spot !== null && this.world.spots[hl.spot]) {
-      const s = this.world.spots[hl.spot];
-      this.spotSelect.visible = true;
-      this.spotSelect.position.set(s.x + 0.5, H_SIDEWALK + 0.03, s.y + 0.5);
-    } else this.spotSelect.visible = false;
-  }
+  private labelStates: LabelState[] = [];
 
   /** Zeichnet ein Bild. alpha ist der Anteil zwischen dem letzten und dem nächsten Tick. */
   frame(state: GameState, alpha: number, dt: number): void {
@@ -220,30 +193,30 @@ export class GameView {
     this.lastAlpha = alpha;
     this.rig.update(dt);
     this.updateSun();
-    this.warehouse.sync(state.warehouse);
+    this.warehouse.sync(state.shelves);
     this.crateTimer -= dt;
     if (this.crateTimer <= 0) {
-      this.crateTimer = 0.25;
-      this.updateCrates(state);
+      this.crateTimer = 0.2;
+      this.warehouse.updateCrates(state.crates.map((c) => c.fruit));
     }
+    this.updateOverlays(state, dt);
 
     const simTime = (state.totalTicks + alpha) / 10;
     const figs = this.figures;
     figs.begin();
     for (const p of state.peds) figs.add(this.pedFigure(p, alpha, simTime));
     for (const w of this.warehouse.officeWorkers) figs.add(w);
-    this.staff.update(state, alpha, simTime, figs);
+    this.people.update(state, alpha, simTime, figs);
     figs.end();
     this.vehicles.update(this.world, state.vehicles, alpha);
-    this.updateSpotMarkers(state);
 
     // Auswahlring
     let sx: number | null = null;
     let sz = 0;
-    const person = this.highlight.personId !== null ? state.staff.find((p) => p.id === this.highlight.personId) : undefined;
-    if (person) {
-      sx = person.px + (person.x - person.px) * alpha;
-      sz = person.py + (person.y - person.py) * alpha;
+    const dealer = this.hints.dealerId !== null ? state.dealers.find((d) => d.id === this.hints.dealerId) : undefined;
+    if (dealer) {
+      sx = dealer.px + (dealer.x - dealer.px) * alpha;
+      sz = dealer.py + (dealer.y - dealer.py) * alpha;
     } else if (this.selectedPedId !== null) {
       const sel = state.peds.find((p) => p.id === this.selectedPedId);
       if (sel) {
@@ -253,14 +226,35 @@ export class GameView {
     }
     if (sx !== null) {
       this.selectRing.visible = true;
-      this.selectRing.position.set(sx, 0.11, sz);
+      this.selectRing.position.set(sx, 0.12, sz);
     } else this.selectRing.visible = false;
 
     this.renderer.render(this.scene, this.rig.camera);
     const info = this.renderer.info.render;
     this.stats.drawCalls = info.calls;
     this.stats.triangles = info.triangles;
-    this.floaters.update(dt, (x, y, z, out) => this.project(x, y, z, out));
+
+    const project = (x: number, y: number, z: number, out: { x: number; y: number }) => this.project(x, y, z, out);
+    this.floaters.update(dt, project);
+    // Schilder
+    this.labelStates.length = state.districts.length;
+    for (let i = 0; i < state.districts.length; i++) {
+      const d = state.districts[i];
+      this.labelStates[i] = { owner: d.owner, gang: d.gang, attackable: isAttackable(state, this.world, i) };
+    }
+    const anchor = this.warehouse.nextShelfAnchor(state.shelves);
+    const cost = shelfCost(state);
+    const wh = this.world.warehouse;
+    const idleWithout = state.crates.length === 0 && state.dealers.some((d) => d.mode === 'idle' && d.load.length === 0);
+    this.labels.update(
+      project,
+      this.labelStates,
+      this.world.labels,
+      this.hints.district,
+      anchor ? { ...anchor, cost, affordable: state.money >= cost, hint: this.hints.shelf } : null,
+      idleWithout && capacity(state) > 0 ? { x: wh.doorX + 1, y: 2.2, z: wh.hall.y + wh.hall.h - 1 } : null,
+      this.hints.labels,
+    );
   }
 
   /** Bildschirmposition (CSS-Pixel) einer Weltposition */
@@ -277,41 +271,24 @@ export class GameView {
     const ndc = new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.rig.camera);
     const hit = new Vector3();
-    this.ground.constant = -H_SIDEWALK;
     if (!this.raycaster.ray.intersectPlane(this.ground, hit)) return null;
     return { x: hit.x, y: hit.z };
   }
 
-  /** Verkaufsplatz unter einer Bildschirmposition (mit etwas Toleranz) */
-  spotAt(clientX: number, clientY: number, tolerance = 0.9): number | null {
-    const g = this.groundAt(clientX, clientY);
-    if (!g) return null;
-    let best: number | null = null;
-    let bestD = tolerance * tolerance;
-    for (const s of this.world.spots) {
-      const d = (s.x + 0.5 - g.x) ** 2 + (s.y + 0.5 - g.y) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        best = s.index;
-      }
-    }
-    return best;
-  }
-
-  /** Nächste eigene Person zu einer Bildschirmposition (in Pixeln) */
-  nearestStaff(clientX: number, clientY: number, maxPx: number): number | null {
+  /** Nächster eigener Verkäufer zu einer Bildschirmposition (in Pixeln) */
+  nearestDealer(clientX: number, clientY: number, maxPx: number): number | null {
     const s = this.lastState;
     if (!s) return null;
     const a = this.lastAlpha;
     const pt = { x: 0, y: 0 };
     let best: number | null = null;
     let bestD = maxPx * maxPx;
-    for (const p of s.staff) {
-      this.project(p.px + (p.x - p.px) * a, 0.35, p.py + (p.y - p.py) * a, pt);
-      const d = (pt.x - clientX) ** 2 + (pt.y - clientY) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        best = p.id;
+    for (const d of s.dealers) {
+      this.project(d.px + (d.x - d.px) * a, 0.35, d.py + (d.y - d.py) * a, pt);
+      const dd = (pt.x - clientX) ** 2 + (pt.y - clientY) ** 2;
+      if (dd < bestD) {
+        bestD = dd;
+        best = d.id;
       }
     }
     return best;
@@ -334,6 +311,16 @@ export class GameView {
       }
     }
     return best;
+  }
+
+  /** Viertel unter einer Bildschirmposition */
+  districtAt(clientX: number, clientY: number): number | null {
+    const g = this.groundAt(clientX, clientY);
+    if (!g) return null;
+    const x = Math.floor(g.x);
+    const y = Math.floor(g.y);
+    if (x < 0 || y < 0 || x >= this.world.w || y >= this.world.h) return null;
+    return this.world.district[y * this.world.w + x];
   }
 
   get drawCallsStatic(): number {

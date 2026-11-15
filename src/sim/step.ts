@@ -1,13 +1,11 @@
 // Ein Simulationsschritt (Tick). Systeme sind Funktionen, die den Zustand fortschreiben.
-import { TICKS_PER_DAY, TICKS_PER_HOUR } from '../data/balance';
-import { ROMAN, ROOM_NAMES } from '../data/names';
-import { attractCustomer, initAmbient, stepAmbient } from './ambient';
-import { applyEconomyCommand, checkLevel, pushMessage, type Command } from './commands';
-import { closeDay, deliverDue, openDay } from './day';
-import { assignCooling, stepFreshness } from './economy';
+import { DISTRICT_IDS, DISTRICTS, TICKS_PER_DAY, TICKS_PER_HOUR } from '../data/balance';
+import { attractCustomer, stepAmbient } from './ambient';
+import { applyCommand, pushMessage, type Command } from './commands';
+import { stepDealers } from './dealers';
 import { stepSales, type SaleEvent } from './sales';
+import { checkStory } from './story';
 import type { GameState } from './types';
-import { stepVendors } from './vendors';
 import type { World } from './world';
 
 export { pushMessage };
@@ -22,83 +20,63 @@ export function createStepOutput(): StepOutput {
   return { dayEnded: false, sales: [] };
 }
 
-function applyCommand(state: GameState, world: World, cmd: Command, out: StepOutput): void {
-  switch (cmd.type) {
-    case 'nextDay':
-      if (state.phase === 'dayEnd') startDay(state, world);
-      break;
-    case 'debugSkipHours': {
-      const target = Math.min(TICKS_PER_DAY, state.dayTick + Math.round(cmd.hours * TICKS_PER_HOUR));
-      while (state.phase === 'day' && state.dayTick < target) advance(state, world, out);
-      break;
-    }
-    default:
-      applyEconomyCommand(state, world, cmd);
+/** Tageswechsel: Bilanz, die Gang erholt sich */
+function newDay(s: GameState, out: StepOutput): void {
+  s.history.push(Math.round(s.earnedToday));
+  if (s.history.length > 14) s.history.splice(0, s.history.length - 14);
+  pushMessage(s, 'money', `Tag ${s.day + 1} beendet: ${Math.round(s.earnedToday)} € eingenommen.`);
+  s.earnedToday = 0;
+  for (const d of s.dealers) {
+    d.soldToday = 0;
+    d.earnedToday = 0;
   }
-}
-
-function startDay(state: GameState, world: World): void {
-  state.day++;
-  state.dayTick = 0;
-  state.phase = 'day';
-  openDay(state);
-  const n = deliverDue(state);
-  if (n > 0) {
-    pushMessage(state, 'delivery', `Lieferung vom Großmarkt: ${n} Kisten eingelagert.`, world.warehouse.doorX, world.warehouse.doorY);
-  }
-  initAmbient(state, world);
-}
-
-function endDay(state: GameState, world: World, out: StepOutput): void {
-  closeDay(state, world);
-  state.phase = 'dayEnd';
+  DISTRICT_IDS.forEach((id, i) => {
+    const st = s.districts[i];
+    if (st.owner === 'gang') st.gang = Math.min(DISTRICTS[id].garrison, st.gang + DISTRICTS[id].regenPerDay);
+  });
+  s.day++;
+  s.dayTick = 0;
   out.dayEnded = true;
-  pushMessage(state, 'report', `Tagesabschluss für Tag ${state.day + 1}.`);
 }
 
-function stepConstruction(state: GameState, world: World): void {
-  for (const r of state.warehouse.rooms) {
-    if (r.buildTicks <= 0) continue;
-    if (--r.buildTicks > 0) continue;
-    if (r.type === 'office') {
-      r.level++;
-      pushMessage(state, 'info', `Büro ${ROMAN[r.level - 1]} fertiggestellt.`, world.warehouse.doorX, world.warehouse.doorY);
-    } else {
-      pushMessage(state, 'info', `${ROOM_NAMES[r.type]} fertiggestellt.`, world.warehouse.doorX, world.warehouse.doorY);
-    }
-    assignCooling(state);
-  }
-}
-
-function advance(state: GameState, world: World, out: StepOutput): void {
-  state.dayTick++;
-  state.totalTicks++;
-  if (state.orders.length) {
-    const n = deliverDue(state);
-    if (n > 0) pushMessage(state, 'delivery', `Lieferung vom Großmarkt: ${n} Kisten eingelagert.`, world.warehouse.doorX, world.warehouse.doorY);
-  }
-  stepConstruction(state, world);
-  stepFreshness(state);
-  stepVendors(state, world);
+function advance(s: GameState, world: World, out: StepOutput): void {
+  s.dayTick++;
+  s.totalTicks++;
+  stepDealers(s, world);
   const before = out.sales.length;
-  stepSales(state, world, out.sales);
-  if (state.ambient) for (let i = before; i < out.sales.length; i++) attractCustomer(state, world, out.sales[i].spotTile);
+  stepSales(s, world, out.sales);
+  if (s.ambient) for (let i = before; i < out.sales.length; i++) attractCustomer(s, world, out.sales[i].spotTile);
   if (out.sales.length > 200) out.sales.splice(0, out.sales.length - 200);
-  checkLevel(state);
-  stepAmbient(state, world);
-  if (state.dayTick >= TICKS_PER_DAY) endDay(state, world, out);
+  if (s.totalTicks % 5 === 0) checkStory(s, pushMessage);
+  stepAmbient(s, world);
+  if (s.dayTick >= TICKS_PER_DAY) newDay(s, out);
 }
 
-/** Arbeitet die Befehle der Warteschlange ab, ohne die Zeit fortzuschreiben (Pause, Tagesabschluss). */
-export function flushCommands(state: GameState, world: World, out: StepOutput): void {
-  if (!state.queue.length) return;
-  const cmds = state.queue.splice(0, state.queue.length);
-  for (const c of cmds) applyCommand(state, world, c, out);
+function runCommand(s: GameState, world: World, cmd: Command, out: StepOutput): void {
+  if (cmd.type === 'debugSkipHours') {
+    const ticks = Math.round(cmd.hours * TICKS_PER_HOUR);
+    for (let i = 0; i < ticks && !isPaused(s); i++) advance(s, world, out);
+    return;
+  }
+  applyCommand(s, world, cmd);
+  checkStory(s, pushMessage);
+}
+
+/** Während eines Würfelduells steht die Zeit still */
+export function isPaused(s: GameState): boolean {
+  return s.battle !== null;
+}
+
+/** Arbeitet die Befehle der Warteschlange ab, ohne die Zeit fortzuschreiben */
+export function flushCommands(s: GameState, world: World, out: StepOutput): void {
+  if (!s.queue.length) return;
+  const cmds = s.queue.splice(0, s.queue.length);
+  for (const c of cmds) runCommand(s, world, c, out);
 }
 
 /** Führt einen Tick aus. Befehle aus der Warteschlange werden zuerst abgearbeitet. */
-export function step(state: GameState, world: World, out: StepOutput): void {
-  flushCommands(state, world, out);
-  if (state.phase !== 'day') return;
-  advance(state, world, out);
+export function step(s: GameState, world: World, out: StepOutput): void {
+  flushCommands(s, world, out);
+  if (isPaused(s)) return;
+  advance(s, world, out);
 }

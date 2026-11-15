@@ -1,99 +1,155 @@
-// Karte der Stadt: ASCII-Raster (64 × 64) plus Listen für Verkaufsplätze, Routen und Gebiete.
-// Die Platzfaktoren der Verkaufsplätze stehen als Spielwerte in balance.ts (SPOT_FACTORS).
+// Karte der Großstadt: ASCII-Raster (96 × 96) plus Listen für Viertel, Verkaufsplätze, Lager und Routen.
 // x wächst nach Osten, y nach Süden. Ein Zeichen entspricht einem Feld.
 //
 // Feldtypen:
 //   #  Straße            .  Gehweg           =  Überweg
-//   :  Platz (Pflaster)  ,  Grünfläche       W  Lagerhaus (Grundstück)
+//   :  Platz (Pflaster)  ,  Grünfläche       W  Lagergrundstück (Halle und Hof)
 // Gebäude (nicht begehbar). Groß- und Kleinbuchstaben trennen benachbarte Gebäude:
-//   R r  Reihenhaus      B b  Backstein       P p  Putz
-//   L l  Laden mit Markise                    S    Bahnhof
-//   H h  Halle           U u  Hochschule      M    Mensa
-//   A    Dienststelle der Gewerbeaufsicht     F    Brunnen
-//   Z    Zaun            T    Baum            |    Gleise
-//   Q    Wartehäuschen   V    Pavillon (Treffpunkt der Gemüsegang)
+//   B b  Backstein       P p  Putz           L l  Laden mit Markise
+//   D d  Kaufhaus/Büro   X x  Hochhaus       Y    höchstes Hochhaus mit Hubschrauberlandeplatz
+//   S    Hauptbahnhof    K    Kirche         H h  Halle
+//   G g  Garagen         U u  Hochschule     E    U-Bahn-Eingang
+//   F    Brunnen         T    Baum           |    Gleise
+//   Q    Wartehäuschen   V    Pavillon       Z    Zaun
 import type { DistrictId } from './balance';
 
 export const MAP_ROWS: readonly string[] = [
-  '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||', // 0
-  '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||', // 1
-  'BBBBB.PPPppp,,SSSSSSSSSSSSSSSSSS,,,.........::..................', // 2
-  'BBBBB.PPPppp,,SSSSSSSSSSSSSSSSSS,,,.HHHHHHHH::HHHHHHHH..HHHHHHHH', // 3
-  'BBBBB.PPPppp,,SSSSSSSSSSSSSSSSSS,,,.HHHHHHHH::HHHHHHHH..HHHHHHHH', // 4
-  'bbbbb.......,,SSSSSSSSSSSSSSSSSS,,,.HHHHHHHH::HHHHHHHH..HHHHHHHH', // 5
-  'bbbbb.BBBbbbT:::::::::::::::::::::T.HHHHHHHH::HHHHHHHH..HHHHHHHH', // 6
-  'bbbbb.BBBbbb:::::::::::::::::::::::.HHHHHHHH::HHHHHHHH..HHHHHHHH', // 7
-  'BBBBB.BBBbbb:::::::::::::::::::::::.HHHHHHHH::HHHHHHHH..HHHHHHHH', // 8
-  'BBBBB.BBBbbb:::::::::::::::::::::::.HHHHHHHH::..........HHHHHHHH', // 9
-  'BBBBB.BBBbbbT:::::Q:::::::::::Q:::T.ZZZZZZZZ::.........ZZZZZZZZZ', // 10
-  '................................................................', // 11
-  '###############=#################=#####=#####=##################', // 12
-  '###############=#################=#####=#####=##################', // 13
-  '......==..................==......................==............', // 14
-  'RRrrR.##.RRrr,,:,,RRrrRRr.##.BBBbbbBBB::PPPpppPPP.##............', // 15
-  'RRrrR.##.RRrrT,:,,RRrrRRr.##.BBBbbbBBB::PPPpppPPP.##..HHHHHHHHHH', // 16
-  'RRrrR.##.RRrr,,:,TRRrrRRr.##.BBBbbbBBB::PPPpppPPP.##..HHHHHHHHHH', // 17
-  ',,,,,.##.,,,,,,:,,,,,,,,,.##.BBBbbbBBB::PPPpppPPP.##..HHHHHHHHHH', // 18
-  ',,,,,.##.,,,,:::::,,,,,,,.==.::::PPPPP::PPPpppPPP.##..HHHHHHHHHH', // 19
-  ',,,,,.##.,,,,,,:,,,,,,,,,.##.LLLLLLT::::::::::TLL.==..HHHHHHHHHH', // 20
-  'RRrrR.##.RRrr,,:,TRRrrRRr.##.LLLLLL::::::::::::LL.##..HHHHHHHHHH', // 21
-  'RRrrR.##.RRrrT,:,,RRrrRRr.##.LLLLLL:::::FFF::::LL.##..HHHHHHHHHH', // 22
-  'RRrrR.##.RRrr,,:,,RRrrRRr.##.llllll:::::FFF::::ll.##..ZZZZZZZZZZ', // 23
-  '......==..................##.llllll::::::::::::ll.##.........ZZZ', // 24
-  '#####=##=######=#########=##.llllll::::::::::::ll.##..HHHHHHHZZZ', // 25
-  '#####=##=######=#########=##.::::::::::::::::::::.##..HHHHHHHZZZ', // 26
-  '......==..................==.::::::::::::::::::::.==..HHHHHHHZZZ', // 27
-  'RRrrR.##.,WWWWWWWWWWWWRRR.##.::::::::::::::::::::.##..HHHHHHHZZZ', // 28
-  'RRrrR.##.,WWWWWWWWWWWWRRR.##.LLLLLL::::::::::::LL.##..HHHHHHHZZZ', // 29
-  'RRrrR.##.TWWWWWWWWWWWWrrr.##.LLLLLL::::::::::::LL.##..HHHHHHHZZZ', // 30
-  ',,,,,.##.,WWWWWWWWWWWWrrr.##.LLLLLL::::::::::::LL.##..HHHHHHHZZZ', // 31
-  ',,,,,.##.,WWWWWWWWWWWW,,,.##.llllll::::::::::::ll.##.........ZZZ', // 32
-  ',,,,,.##.,WWWWWWWWWWWW,T,.##.llllllT::::::::::Tll.##............', // 33
-  'RRrrR.##.,WWWWWWWWWWWW,,,.##.llllAA:::::BBBbbbBBB.##..HHHHHHHHHH', // 34
-  'RRrrR.##.,WWWWWWWWWWWW,,,.##.LLLLAAAAA::BBBbbbBBB.##..HHHHHHHHHH', // 35
-  'RRrrR.##.,,,,,,,,,,,,,,,,.==.::::AAAAA::BBBbbbBBB.##..HHHHHHHHHH', // 36
-  ',,,,,.##.T,,,,,,,,,,,,,,,.##.PPppAAAAA::BBBbbbBBB.##..HHHHHHHHHH', // 37
-  'RRrrR.##.,RRrrRRrrRRrrRRr.##.PPppAAAAA::BBBbbbBBB.##..HHHHHHHHHH', // 38
-  'RRrrR.##.,RRrrRRrrRRrrRRr.##.PPppAAAAA::BBBbbbBBB.##..HHHHHHHHHH', // 39
-  'RRrrR.##.,RRrrRRrrRRrrRRr.##.PPppAAAAA::BBBbbbBBB.##..HHHHHHHHHH', // 40
-  '......==..................==......................==............', // 41
-  '#####=##=###=############=##=#####=####=#########=##=###########', // 42
-  '#####=##=###=############=##=#####=####=#########=##=###########', // 43
-  '......==..................==......................==............', // 44
-  'RRrrR.##.RRrrRRrrRRrrRRrr.##.,,,,::,,UUUUUUuuuuuu.##.,,,,,,,,,,,', // 45
-  'RRrrR.##.RRrrRRrrRRrrRRrr.##.,T,,::,,UUUUUUuuuuuu.##.,UUUUUuuuu,', // 46
-  'RRrrR.##.RRrrRRrrRRrrRRrr.##.,,,,::,,UUUUUUuuuuuu.##.,UUUUUuuuu,', // 47
-  ',,,,,.##.,,,.,,,,,,,,,,,,.==.,,T,::,,UUUUUUuuuuuu.##.,UUUUUuuuu,', // 48
-  ',,,,,.##.,,,.,,,,,,,,,,,,.##.,,,,::,,,,,,,,,,,,,,.==.,UUUUUuuuu,', // 49
-  'RRrrR.##.RRrrRRrrRRrrRRrr.##.::::::::::::::::::::.##.,UUUUUuuuu,', // 50
-  'RRrrR.##.RRrrRRrrRRrrRRrr.##.::::::::::::::::::::.##.,,,,,,,,,,,', // 51
-  ',,,,,.##..................##.,,,,::,,,,,,,,T,,,,,.##.:::::::::::', // 52
-  ',,,,,.######=############=##.UUUU::,,MMMMMM,,,,T,.##.,,,,,,,,,,,', // 53
-  ',,,,,.######=############=##.UUUU::,,MMMMMM,,,,,,.##.,,UUUUUUUU,', // 54
-  ',,,,,.,,..................##.UUUU::,,MMMMMM,VVV,,.##.,,UUUUUUUU,', // 55
-  'RRrrR.,,,RRrrRRrrRRrrRRrr.##.UUUU::,,MMMMMM,VVV,,.##.,,UUUUUUUU,', // 56
-  'RRrrR.,,,RRrrRRrrRRrrRRrr.##.UUUU::,,MMMMMM,VVV,,.##.,,UUUUUUUU,', // 57
-  'RRrrR.,,,RRrrRRrrRRrrRRrr.##.,,,,::,T,,,,,,,,,,,T.##.,,UUUUUUUU,', // 58
-  ',,,,,.,,,,,,,,,,,,,,,,,,,.##.,T,,::,,,,,,,,,,,,,,.##.,,UUUUUUUU,', // 59
-  ',,,,,.,,,,,,,,,,,,,T,,,,,.##......................##.,,,,,,,,,,,', // 60
-  ',,T,,.,,,,,,,,T,,,,,,,,,,.##########################.,T,,,T,,,,,', // 61
-  ',,,,,.,,,T,,,,,,,,,,,,,,,.##########################.,,,,,,,,,T,', // 62
-  ',,,,,.,,,,,,,,,,,,,,,,,,,............................,,,,,,,,,,,', // 63
+  '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||', // 0
+  '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||', // 1
+  '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||', // 2
+  '.##.BBB||||||||||||||||||||||PPPPP.##.DDDDDDDDDdddddddddDDDDDDDDDd.##.DDDDDDDdddddddDDDDDDDd.##.', // 3
+  '.##.BBBSSSSSSSSSSSSSSSSSSSSSSPPPPP.##.DDDDDDDDDdddddddddDDDDDDDDDd.##.DDDDDDDdddddddDDDDDDDd.##.', // 4
+  '.##.BBBSSSSSSSSSSSSSSSSSSSSSSPPPPP.##.DDDDDDDDDdddddddddDDDDDDDDDd.##.DDDDDDDdddddddDDDDDDDd.##.', // 5
+  '.##.BBBSSSSSSSSSSSSSSSSSSSSSSPPPPP.##.DDDDDDDDDdddddddddDDDDDDDDDd.##.DDDDDDDdddddddDDDDDDDd.##.', // 6
+  '.##.bbbSSSSSSSSSSSSSSSSSSSSSSppppp.##.DDDDDDDDDdddddddddDDDDDDDDDd.##.DDDDDDDdddddddDDDDDDDd.##.', // 7
+  '.##.bbbSSSSSSSSSSSSSSSSSSSSSSppppp.##.DDDDDDDDDdddddddddDDDDDDDDDd.##.DDDDDDDdddddddDDDDDDDd.##.', // 8
+  '.##.bbbSSSSSSSSSSSSSSSSSSSSSSppppp.##::T:::T:::T:::T:::T:::T:::T::.##.:T:::T:::T:::T:::T:::T:##.', // 9
+  '.##.T::::::::::::::::::::::::::::T.##:::::::::::::::::::::::::::::.##.:::::::::::::::::::::::##.', // 10
+  '.##.::::::::::::::::::::::::::::::.##:::::::::::::::::::::::::::::.==.:::::::::::::::::::::::##.', // 11
+  '.##.::::::::::::::::::::::::::::::.##=#######=############=#######=##=########=#########=###=##.', // 12
+  '.##.::::::::::::::::::::::::::::::.##=#######=############=#######=##=########=#########=###=##.', // 13
+  '.##.::::::::T:::::::::::::T:::::::.##:::::::::::::::::::::::::::::.==.:::::::::::::::::::::::##.', // 14
+  '.##.::::::::::::::::::::::::::::::.==:::::::::::::::::::::::::::::.##.:::::::::::::::::::::::##.', // 15
+  '.##.::::::::::::::::::::::::::::::.##::T:::T:::T:::T:::T:::T:::T::.##.:T:::T:::T:::T:::T:::T:##.', // 16
+  '.##.::::::::::::::::::::::::::::::.##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 17
+  '.##.T::::Q::::::::::Q:::::::::Q::T.##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 18
+  '.==................................##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 19
+  '=##=######=#############=#########=##.DDDDDDDdddddddDDDDDDDddddddd.==.DDDDDDDdddddddDDDDDDDd.##.', // 20
+  '=##=######=#############=#########=##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 21
+  '.==................................##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 22
+  '.##.PPPPPpppppPPPPPpppppPPPPPppppp.##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 23
+  '.##.PPPPPpppppPPPPPpppppPPPPPppppp.##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 24
+  '.##.PPPPPpppppPPPPPpppppPPPPPppppp.##.DDDDDDDdddddddDDDDDDDddddddd.##.DDDDDDDdddddddDDDDDDDd.##.', // 25
+  '.==................................==..............................==........................==.', // 26
+  '=##=###########=############=#####=##=############=###############=##=##########=###########=##=', // 27
+  '=##=###########=############=#####=##=############=###############=##=##########=###########=##=', // 28
+  '.==................................==..............................==........................==.', // 29
+  '.##.,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,.##.BBBBBBB::::::::::::PPPPPPPPP.##.::::::::::T:::::::::::.##.', // 30
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWGGGGG.##.BBBBBBB::KKKKKKKK::PPPPPPPPP.##.:XXXXXXX::::xxxxxxxx::.##.', // 31
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWGGGGG.##.BBBBBBB::KKKKKKKK::PPPPPPPPP.##.:XXXXXXX::::xxxxxxxx::.##.', // 32
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWGGGGG.##.BBBBBBB::KKKKKKKK::PPPPPPPPP.##.:XXXXXXX::::xxxxxxxx::.##.', // 33
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWggggg.##.bbbbbbb::KKKKKKKK::ppppppppp.##.:XXXXXXX:T::xxxxxxxx::.##.', // 34
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWggggg.##.bbbbbbb::KKKKKKKK::ppppppppp.##.:XXXXXXX::::xxxxxxxx::.##.', // 35
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWggggg.##.bbbbbbb::KKKKKKKK::ppppppppp.##.:XXXXXXX::::xxxxxxxx::.##.', // 36
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWW,T,,,.##.bbbbbbb::KKKKKKKK::ppppppppp.##.:XXXXXXX::::xxxxxxxx::.##.', // 37
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWBBBBB.==.BBBBBBB::::::::::::PPPPPPPPP.==.::::::::::::xxxxxxxx::.##.', // 38
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWBBBBB.##.LLLLLLL::::::::::::::LLLLLLL.##.::::::::::::::::::::::.##.', // 39
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWBBBBB.##.LLLLLLLT::::::::::::TLLLLLLL.##.:DDDDDD::T::::::::::::.##.', // 40
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWBBBBB.##.LLLLLLL::::::::::::::LLLLLLL.##.:DDDDDD:::::::::::::::.##.', // 41
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWBBBBB.##.lllllll::::::::::::::lllllll.##.:DDDDDD:::::::::::::T:.##.', // 42
+  '.##.,WWWWWWWWWWWWWWWWWWWWWWWWBBBBB.##.lllllll::::::::::::::lllllll.##.:DDDDDD:::::::::::::::.##.', // 43
+  '.==................................##.lllllll:::::FFFF:::::lllllll.##........................##.', // 44
+  '=##=########=#############=#######=##.LLLLLLL:::::FFFF:::::LLLLLLL.##=########=#######=#####=##.', // 45
+  '=##=########=#############=#######=##.::::::::::::FFFF::::::::::::.##=########=#######=#####=##.', // 46
+  '.==................................==.::::::::::::FFFF::::::::::::.==........................##.', // 47
+  '.##.BBBBBBBBT::::::::HHHHHHHhhhhhh.##.LLLLLLL::::::::::::::LLLLLLL.##.::::::::::::::::::::::.##.', // 48
+  '.##.BBBBBBBB:::::::::HHHHHHHhhhhhh.##.LLLLLLL::::::::::::::LLLLLLL.##.:T:::T:::T:::T:::T:::T.##.', // 49
+  '.##.BBBBBBBB:::EEE:::HHHHHHHhhhhhh.##.LLLLLLL::::::::::::::LLLLLLL.##.::::::::::::::::::::::.##.', // 50
+  '.##.BBBBBBBB:::EEE:::HHHHHHHhhhhhh.##.lllllll::::::::::::::lllllll.##.::::::::::::::::::::::.##.', // 51
+  '.##.bbbbbbbb:::::::::HHHHHHHhhhhhh.##.lllllll::::::::::::::lllllll.##.::::::::::::::::::::::.##.', // 52
+  '.##.bbbbbbbb::::::::THHHHHHHhhhhhh.##.lllllll::::::::::::::lllllll.##.::::::::::::::::::::::.##.', // 53
+  '.##.bbbbbbbb,,,,,,,,,HHHHHHHhhhhhh.##.LLLLLLL::::::::::::::LLLLLLL.##.:::::::::::::YYYYYYYY:.##.', // 54
+  '.##.bbbbbbbbBBBBBbbbbbBBBBBbbbbbBB.##.PPPPPPPT::::::::::::TPPPPPPP.##.::XXXXXXX::::YYYYYYYY:.##.', // 55
+  '.##.BBBBBBBBBBBBBbbbbbBBBBBbbbbbBB.##.PPPPPPP::::::::::::::PPPPPPP.##.::XXXXXXX::::YYYYYYYY:.##.', // 56
+  '.##.BBBBBBBBBBBBBbbbbbBBBBBbbbbbBB.==.PPPPPPPLLLLllllLLLLllPPPPPPP.==.::XXXXXXX::::YYYYYYYY:.##.', // 57
+  '.##.BBBBBBBBBBBBBbbbbbBBBBBbbbbbBB.##.PPPPPPPLLLLllllLLLLllPPPPPPP.##.::XXXXXXX::::YYYYYYYY:.##.', // 58
+  '.##.BBBBBBBBBBBBBbbbbbBBBBBbbbbbBB.##.pppppppLLLLllllLLLLllppppppp.##.::XXXXXXX::::YYYYYYYY:.##.', // 59
+  '.##.bbbbbbbbBBBBBbbbbbBBBBBbbbbbBB.##.pppppppLLLLllllLLLLllppppppp.##.::XXXXXXX::::YYYYYYYY:.##.', // 60
+  '.##.bbbbbbbbBBBBBbbbbbBBBBBbbbbbBB.##.pppppppLLLLllllLLLLllppppppp.##.::XXXXXXX::::YYYYYYYY:.##.', // 61
+  '.##.bbbbbbbbBBBBBbbbbbBBBBBbbbbbBB.##.pppppppLLLLllllLLLLllppppppp.##.::::::::::::::::::::::.##.', // 62
+  '.==................................==..............................==........................==.', // 63
+  '=##=########=#####################=##=####=###############=#######=##=##########=###########=##=', // 64
+  '=##=########=#####################=##=####=###############=#######=##=##########=###########=##=', // 65
+  '.==................................==.............==...............==........................==.', // 66
+  '.##.BBBBbbbbBBBBbbbb,,,,,,,,,,,,::,,,,,,,,,,,,LLL.##.UUUUUUUuuuuuu.##.::::::::::::::::::::::.##.', // 67
+  '.##.BBBBbbbbBBBBbbbb,,T,,,,,,,,,::,,,T,,,,,,,,LLL.##.UUUUUUUuuuuuu.##.:xxxxxxx::T::XXXXXXXX:.##.', // 68
+  '.##.BBBBbbbbBBBBbbbb,,,,,,,VVV,,::,,,,,,,,,,,,LLL.##.UUUUUUUuuuuuu.##.:xxxxxxx:::::XXXXXXXX:.##.', // 69
+  '.##.BBBBbbbbBBBBbbbb,,,,,,,VVV,,::,,,,,,,,T,,,LLL.##.UUUUUUUuuuuuu.##.:xxxxxxx:::::XXXXXXXX:.##.', // 70
+  '.##.BBBBbbbbBBBBbbbb,,,,,,,,,,,,::,,,,,,,,,,,,lll.##.UUUUUUUuuuuuu.##.:xxxxxxx:::::XXXXXXXX:.##.', // 71
+  '.##.BBBBbbbbBBBBbbbb::::::::::::::::::::::::::lll.==.UUUUUUUuuuuuu.==.:xxxxxxx:T:::XXXXXXXX:.##.', // 72
+  '.##.BBBBbbbbBBBBbbbb::::::::::::::::::::::::::lll.##.UUUUUUUuuuuuu.##.:xxxxxxx:::::XXXXXXXX:.##.', // 73
+  '.##.BBBBbbbbBBBBbbbb,,,,,T,,,,,,::,,,,,,T,,,,,lll.##.UUUUUUUuuuuuu.##.:xxxxxxx:::::XXXXXXXX:.##.', // 74
+  '.##.BBBBbbbbBBBBbbbb,,,,,,,,,,,,::,,,,,,,,,T,,LLL.##.UUUUUUUuuuuuu.##.:xxxxxxx:::::XXXXXXXX:.##.', // 75
+  '.##.BBBBbbbbBBBBbbbb,,,T,,,,,,,,::,,,,T,,,,,,,LLL.##.UUUUUUUuuuuuu.##.:xxxxxxx:::::XXXXXXXX:.##.', // 76
+  '.##.BBBBbbbbBBBBbbbb,,,,,,,,,T,,::,,,,,,,,,,,,LLL.##.UUUUUUUuuuuuu.##.::::::::::T::XXXXXXXX:.##.', // 77
+  '.##.BBBBbbbbBBBBbbbb,,,,,,,,,,,,::,,,,,,,,,,,,LLL.##.:::::::::::::.##.::::::::::::::::::::::.##.', // 78
+  '.==................................==.............==...............==........................==.', // 79
+  '=##=######################=#######=##=###########=##=#######=#####=##=##########=###########=##=', // 80
+  '=##=######################=#######=##=###########=##=#######=#####=##=##########=###########=##=', // 81
+  '.==................................==.............==...............==........................==.', // 82
+  '.##.PPPPPPppppppPPPP::::::ppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 83
+  '.##.PPPPPPppppppPPPP::::::ppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 84
+  '.##.PPPPPPppppppPPPP::::::ppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 85
+  '.##.PPPPPPppppppPPPPPPppppppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.==.DDDDDDDdddddddDDDDDDDd.##.', // 86
+  '.##.PPPPPPppppppPPPPPPppppppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 87
+  '.##.PPPPPPppppppPPPPPPppppppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 88
+  '.##.PPPPPPppppppPPPPPPppppppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 89
+  '.##.PPPPPPppppppPPPPPPppppppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 90
+  '.##.PPPPPPppppppPPPPPPppppppPPPPPPppppppPPPPPPppp.##.BBBBBBBbbbbbb.##.DDDDDDDdddddddDDDDDDDd.##.', // 91
+  '.==................................==.............==...............==........................==.', // 92
+  '=##############################################################################################=', // 93
+  '=##############################################################################################=', // 94
+  '.==................................==..............................==........................==.', // 95
 ];
 
 export interface DistrictArea {
   id: DistrictId;
-  /** Rechtecke [x0, y0, x1, y1] einschließlich, spätere überschreiben frühere */
+  /** Rechtecke [x0, y0, x1, y1] einschließlich; spätere überschreiben frühere */
   rects: [number, number, number, number][];
 }
 
 export const DISTRICT_AREAS: DistrictArea[] = [
-  { id: 'residential', rects: [[0, 12, 25, 63]] },
-  { id: 'station', rects: [[0, 0, 34, 11]] },
-  { id: 'industrial', rects: [[35, 0, 63, 11], [52, 12, 63, 41]] },
-  { id: 'oldtown', rects: [[26, 12, 51, 41]] },
-  { id: 'campus', rects: [[26, 42, 63, 63]] },
+  { id: 'underground', rects: [[0, 27, 34, 64]] },
+  { id: 'station', rects: [[0, 0, 34, 26]] },
+  { id: 'oldtown', rects: [[35, 27, 66, 64]] },
+  { id: 'shopping', rects: [[35, 0, 95, 26]] },
+  { id: 'banking', rects: [[67, 27, 95, 95]] },
+  { id: 'scene', rects: [[0, 65, 66, 95]] },
 ];
+
+/** Benachbarte Viertel: angreifen kann man nur ein Nachbarviertel eines eigenen Viertels */
+export const DISTRICT_LINKS: [DistrictId, DistrictId][] = [
+  ['underground', 'station'],
+  ['underground', 'oldtown'],
+  ['underground', 'scene'],
+  ['station', 'oldtown'],
+  ['station', 'shopping'],
+  ['oldtown', 'shopping'],
+  ['oldtown', 'banking'],
+  ['oldtown', 'scene'],
+  ['shopping', 'banking'],
+  ['scene', 'banking'],
+];
+
+/** Ankerpunkt für das Schild über jedem Viertel */
+export const DISTRICT_LABELS: Record<DistrictId, [number, number]> = {
+  underground: [17, 54],
+  station: [18, 14],
+  oldtown: [51, 42],
+  shopping: [60, 14],
+  banking: [80, 50],
+  scene: [33, 72],
+};
 
 export interface SpotData {
   id: string;
@@ -101,45 +157,73 @@ export interface SpotData {
   x: number;
   y: number;
   district: DistrictId;
-  /** Parkbucht für den Verkaufswagen */
-  parking?: boolean;
 }
 
 export const SPOTS: SpotData[] = [
-  { id: 'res-1', name: 'Lindenstraße', x: 18, y: 27, district: 'residential' },
-  { id: 'res-2', name: 'Gartenweg', x: 8, y: 31, district: 'residential', parking: true },
-  { id: 'res-3', name: 'Stadtpark', x: 15, y: 19, district: 'residential' },
-  { id: 'sta-1', name: 'Bahnhofsvorplatz West', x: 20, y: 7, district: 'station' },
-  { id: 'sta-2', name: 'Haupteingang', x: 25, y: 9, district: 'station' },
-  { id: 'sta-3', name: 'Busbahnhof', x: 22, y: 10, district: 'station', parking: true },
-  { id: 'sta-4', name: 'Bahnhofsvorplatz Ost', x: 27, y: 10, district: 'station' },
-  { id: 'old-1', name: 'Fußgängerzone', x: 47, y: 27, district: 'oldtown' },
-  { id: 'old-2', name: 'Marktplatz Nord', x: 42, y: 24, district: 'oldtown' },
-  { id: 'old-3', name: 'Marktplatz Süd', x: 44, y: 31, district: 'oldtown' },
-  { id: 'old-4', name: 'Kirchgasse', x: 39, y: 33, district: 'oldtown' },
-  { id: 'old-5', name: 'Brunnengasse', x: 38, y: 18, district: 'oldtown' },
-  { id: 'old-6', name: 'Rathausecke', x: 46, y: 21, district: 'oldtown', parking: true },
-  { id: 'uni-1', name: 'Campuswiese', x: 31, y: 50, district: 'campus' },
-  { id: 'uni-2', name: 'Hörsaalgebäude', x: 34, y: 46, district: 'campus', parking: true },
-  { id: 'uni-3', name: 'Mensa', x: 36, y: 50, district: 'campus' },
-  { id: 'ind-1', name: 'Werkstor Nord', x: 46, y: 11, district: 'industrial', parking: true },
-  { id: 'ind-2', name: 'Hallenhof', x: 56, y: 24, district: 'industrial' },
+  { id: 'u-1', name: 'Lagerstraße', x: 24, y: 44, district: 'underground' },
+  { id: 'u-2', name: 'U-Bahn-Platz', x: 16, y: 52, district: 'underground' },
+  { id: 'u-3', name: 'Garagenhof', x: 34, y: 40, district: 'underground' },
+  { id: 'b-1', name: 'Bahnhofsvorplatz West', x: 9, y: 12, district: 'station' },
+  { id: 'b-2', name: 'Busbahnhof', x: 18, y: 16, district: 'station' },
+  { id: 'b-3', name: 'Haupteingang', x: 26, y: 12, district: 'station' },
+  { id: 'b-4', name: 'Bahnhofsvorplatz Ost', x: 31, y: 16, district: 'station' },
+  { id: 'a-1', name: 'Marktplatz Nord', x: 48, y: 41, district: 'oldtown' },
+  { id: 'a-2', name: 'Am Brunnen', x: 55, y: 50, district: 'oldtown' },
+  { id: 'a-3', name: 'Ladenpassage West', x: 41, y: 47, district: 'oldtown' },
+  { id: 'a-4', name: 'Ladenpassage Ost', x: 61, y: 47, district: 'oldtown' },
+  { id: 'a-5', name: 'Kirchplatz', x: 50, y: 38, district: 'oldtown' },
+  { id: 'e-1', name: 'Boulevard West', x: 42, y: 10, district: 'shopping' },
+  { id: 'e-2', name: 'Kaufhausecke', x: 52, y: 15, district: 'shopping' },
+  { id: 'e-3', name: 'Boulevard Mitte', x: 62, y: 10, district: 'shopping' },
+  { id: 'e-4', name: 'Galerie', x: 74, y: 15, district: 'shopping' },
+  { id: 'e-5', name: 'Boulevard Ost', x: 86, y: 10, district: 'shopping' },
+  { id: 'k-1', name: 'Turmplatz', x: 80, y: 36, district: 'banking' },
+  { id: 'k-2', name: 'Bankenplatz', x: 80, y: 51, district: 'banking' },
+  { id: 'k-3', name: 'Börsenecke', x: 88, y: 51, district: 'banking' },
+  { id: 'k-4', name: 'Konzernhof', x: 81, y: 72, district: 'banking' },
+  { id: 'k-5', name: 'Bankenallee', x: 74, y: 44, district: 'banking' },
+  { id: 's-1', name: 'Parkweg', x: 32, y: 70, district: 'scene' },
+  { id: 's-2', name: 'Parkpromenade', x: 40, y: 72, district: 'scene' },
+  { id: 's-3', name: 'Campus', x: 58, y: 78, district: 'scene' },
+  { id: 's-4', name: 'Kulturplatz', x: 22, y: 84, district: 'scene' },
 ];
 
-/** Grundstück des Lagerhauses (4 Bauabschnitte zu je 6 × 4 Feldern) und Tor */
-export const WAREHOUSE_LOT = { x: 10, y: 28, w: 12, h: 8, door: [12, 27] as [number, number] };
+/**
+ * Lagergrundstück: geräumige Halle mit 12 Regalplätzen (je 3 × 1 Felder) und ein Hof für die Kämpfer.
+ * Die Regalplätze stehen in der Reihenfolge, in der sie ausgebaut werden (vorn am Tor zuerst).
+ */
+export const WAREHOUSE = {
+  lot: { x: 5, y: 31, w: 24, h: 13 },
+  hall: { x: 5, y: 31, w: 16, h: 13 },
+  yard: { x: 22, y: 31, w: 7, h: 13 },
+  office: { x: 5, y: 40, w: 4, h: 4 },
+  door: [12, 44] as [number, number],
+  doorWidth: 2,
+  yardGate: [25, 44] as [number, number],
+  shelfSlots: [
+    [9, 38], [13, 38], [17, 38], [5, 38],
+    [9, 35], [13, 35], [17, 35], [5, 35],
+    [9, 32], [13, 32], [17, 32], [5, 32],
+  ] as [number, number][],
+};
 
 // Fahrzeugrouten entlang der Fahrbahnmitte. Die Fahrzeuge halten sich rechts.
 export const CAR_ROUTES: [number, number][][] = [
-  [[7, 13], [51, 13], [51, 43], [7, 43]],
-  [[27, 43], [51, 43], [51, 13], [27, 13]],
-  [[7, 13], [27, 13], [27, 26], [7, 26]],
-  [[7, 43], [27, 43], [27, 26], [7, 26]],
-  [[7, 43], [7, 54], [27, 54], [27, 43]],
-  [[27, 43], [27, 62], [51, 62], [51, 43]],
-  [[51, 13], [7, 13], [7, 43], [51, 43]],
+  [[2, 28], [36, 28], [36, 65], [2, 65]],
+  [[36, 28], [68, 28], [68, 65], [36, 65]],
+  [[68, 28], [94, 28], [94, 65], [68, 65]],
+  [[2, 65], [36, 65], [36, 94], [2, 94]],
+  [[36, 65], [68, 65], [68, 94], [36, 94]],
+  [[68, 65], [94, 65], [94, 94], [68, 94]],
+  [[36, 13], [68, 13], [68, 28], [36, 28]],
+  [[68, 13], [94, 13], [94, 28], [68, 28]],
+  [[2, 21], [36, 21], [36, 28], [2, 28]],
+  [[68, 65], [68, 28], [36, 28], [36, 65]],
+  [[2, 94], [94, 94], [94, 65], [2, 65]],
+  [[36, 13], [36, 94], [68, 94], [68, 13]],
 ];
 
 export const BUS_ROUTES: { points: [number, number][]; stops: [number, number][] }[] = [
-  { points: [[7, 13], [51, 13], [51, 43], [27, 43], [27, 13]], stops: [[18, 13], [30, 13], [36, 43]] },
+  { points: [[2, 28], [68, 28], [68, 65], [2, 65]], stops: [[18, 28], [50, 28], [68, 46], [24, 65]] },
+  { points: [[36, 13], [94, 13], [94, 94], [36, 94]], stops: [[52, 13], [80, 13], [94, 50], [60, 94]] },
 ];

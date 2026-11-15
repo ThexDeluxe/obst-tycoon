@@ -38,3 +38,25 @@ Hier stehen Annahmen zu Punkten, die in der SPEC offen sind, jeweils mit Begrün
 
 - Der Balancing-Bot (`npm run balance`) hat mit den Platzfaktoren aus der ersten Fassung (Wohnviertel 1,0 / 0,9 / 1,1) Stufe 2 erst an Tag 7 erreicht. Am Anfang begrenzen Startbestand, ein Regal und drei Verkäufer mit Bauchladen den Umsatz; das Wohnviertel ist wegen der kurzen Wege dann der beste Ort. Die Platzfaktoren im Wohnviertel wurden auf 1,2 / 1,1 / 1,15 angehoben (weiter im Bereich 0,8 bis 1,2). Damit erreicht der Bot Stufe 2 bei sechs geprüften Seeds an Tag 6, ohne in den ersten zehn Tagen unter 0 € zu fallen.
 - Die Korridore für Stufe 3 bis 5 und das Stadtmonopol hängen von Inhalten aus M3 bis M5 ab (weitere Produkte, Kühlung, schnellere Geräte, Gegner). Der Bot meldet sie bis dahin als „offen“.
+
+## Neuausrichtung (Version 2 der Spezifikation)
+
+Auf Wunsch des Auftraggebers ist das Spiel deutlich einfacher geworden. Die frühere Spezifikation liegt in `docs/SPEC-v1.md`, die neue in `SPEC.md`. Annahmen dazu:
+
+- **Was entfällt:** Frische und Verderb, Löhne, Tagespreise, Bestellung mit Lieferzeit, Tagesbericht als Fenster, Ruf-Stufen, Gewerbeaufsicht, Personalwerte und Bewerber. Sie machten die Oberfläche voll und den Einstieg schwer.
+- **Kistenweise:** Kauf mit einem Tippen, die Kiste steht sofort im Regal. Ein Knopf „+N“ füllt das Lager mit der gewählten Sorte, soweit Geld und Platz reichen.
+- **Verkäufer wählen selbst:** Bewertung je Platz = Kundschaft der aktuellen Stunde mal Preisniveau, geteilt durch (Belegung + 1) und durch (1 + Weg / 70 Felder). Gewählt wird beim Beladen; ein Verkäufer bleibt bis die Ware verkauft ist.
+- **Wertvollste Sorte zuerst:** So lohnt sich teures Obst sofort, ohne dass der Spieler ein Sortiment einstellen muss.
+- **Regale per Plus:** Es wird immer nur der nächste freie Regalplatz mit Plus und Preis angezeigt (vorn am Tor zuerst), damit die Halle nicht voller Symbole ist. Freie Plätze sind am Boden gestrichelt markiert.
+- **Größere Stadt:** 96 × 96 Felder statt 64 × 64, Lagerhalle 16 × 13 Felder statt 12 × 8, Gebäude höher (Kaufhäuser 5 bis 8 Geschosse, Hochhäuser bis 22). Das Lager wirkt dadurch geräumig und die Proportionen zur Stadt stimmen.
+- **Storyline:** Start im Untergrund-Viertel mit U-Bahn-Eingang und Garagen, Ziel Bankenviertel. Die Reihenfolge ergibt sich aus Nachbarschaften und Gangstärke, der Spieler kann zwischen Szeneviertel und Einkaufsmeile wählen.
+- **Rote Gebiete:** halbtransparenter roter Schleier über Boden und Flachdächern plus Grenzlinie; nach der Eroberung blendet er in etwa anderthalb Sekunden aus.
+- **Würfelduell:** Regeln wie bei klassischen Eroberungs-Brettspielen (drei gegen zwei Würfel, Gleichstand für den Verteidiger), aber ohne Namen oder Gestaltung eines bestimmten Spiels. Angegriffen wird immer mit allen Kämpfern aus dem Hof, das hält die Entscheidung einfach. Die Siegchance wird exakt berechnet und angezeigt.
+- **Gang erholt sich:** 1 bis 2 Kämpfer pro Tag, damit man ein Viertel nicht risikolos über Wochen zermürben kann.
+- **Kein Verlieren:** Ohne Löhne und laufende Kosten kann man nicht pleitegehen. Fehlinvestitionen (verlorene Kämpfe) kosten nur Zeit.
+- **Zeit:** Während des Würfelduells steht die Simulation still. Um 22:00 beginnt sofort der nächste Tag.
+- **Spielstände:** Version 3. Stände aus M1 und M2 werden umgewandelt: Tag, Geld (mindestens Startkapital) und Zahl der Verkäufer bleiben, alles andere startet neu.
+
+### Balancing Version 2
+
+- Erste Werte (Preisniveau Bankenviertel 2,5, Drachenfrucht 6 € je Stück, Gang Bankenviertel 20) ließen den Bot das Bankenviertel schon an Tag 10 erobern; danach explodierten die Einnahmen. Angepasst: Preisniveau 1,0 / 1,15 / 1,3 / 1,4 / 1,6 / 2,0, Stückpreise 1,00 bis 3,60 €, Gangstärken 4 / 10 / 16 / 24 / 40, Kämpferpreis +3 € je vorhandenem Kämpfer. Ergebnis: Bahnhofsviertel Tag 3, Altstadt Tag 8, Bankenviertel Tag 22 (Bot mit vorsichtiger Strategie; Spieler mit Schnelldurchlauf brauchen deutlich weniger Echtzeit).

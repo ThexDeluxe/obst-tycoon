@@ -1,9 +1,9 @@
 // Passanten und Verkehr. Beides dient nur der Optik und nutzt einen eigenen Zufallsstrom,
 // damit die Wirtschaft unabhängig davon bleibt, ob die Optik berechnet wird.
-import { AMBIENT, DISTRICT_IDS, DISTRICTS, SALES, TIME, secondsToTicks } from '../data/balance';
+import { AMBIENT, DISTRICT_IDS, DISTRICTS, TIME, secondsToTicks } from '../data/balance';
 import { findPath } from './pathfinding';
 import { rand, randRange } from './rng';
-import { demandCurve, hourOf, weekdayFactor } from './time';
+import { customersPerHour, hourOf, peakCustomers } from './time';
 import type { GameState, Pedestrian } from './types';
 import { TILE, type World } from './world';
 
@@ -20,7 +20,7 @@ export function pedestrianTarget(state: GameState, districtIndex: number): numbe
   const d = DISTRICT_IDS[districtIndex];
   const def = DISTRICTS[d];
   const hour = Math.min(hourOf(state), TIME.dayEndHour - 0.01);
-  const frac = Math.max(AMBIENT.minPedestrianFraction, (demandCurve(d, hour) * weekdayFactor(d, state.day)) / def.peak);
+  const frac = Math.max(AMBIENT.minPedestrianFraction, customersPerHour(d, hour) / peakCustomers(d));
   return Math.round(AMBIENT.maxPedestrians * def.pedestrianShare * Math.min(1, frac));
 }
 
@@ -117,7 +117,7 @@ function advancePed(state: GameState, world: World, p: Pedestrian): void {
       if (p.pathIdx >= p.path.length) {
         // Am Stand angekommen: kurz stehen bleiben
         p.mode = 1;
-        p.timer = secondsToTicks(SALES.customerStandSeconds);
+        p.timer = secondsToTicks(AMBIENT.customerStandSeconds);
         p.path = null;
         p.t = 1;
         p.x = (p.from % w) + 0.5;
@@ -303,6 +303,6 @@ export function attractCustomer(state: GameState, world: World, standTile: numbe
   }
   const p = spawnPed(state, world, target, true);
   p.mode = 1;
-  p.timer = secondsToTicks(SALES.customerStandSeconds);
+  p.timer = secondsToTicks(AMBIENT.customerStandSeconds);
   p.ang = Math.atan2(sy - p.y, sx - p.x);
 }

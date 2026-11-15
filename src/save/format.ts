@@ -1,7 +1,10 @@
 // Speicherformat: JSON mit Versionsnummer und einer Migrationsfunktion pro Version.
 // Diese Datei hat keine Abhängigkeit zum Browser und wird in den Tests geprüft.
+import { START } from '../data/balance';
+import { createDealer } from '../sim/dealers';
+import { spotCapacity } from '../sim/selectors';
 import type { GameState } from '../sim/types';
-import { initEconomy, STATE_VERSION } from '../sim/state';
+import { createInitialState, STATE_VERSION } from '../sim/state';
 import { getWorld } from '../sim/world';
 
 export const SAVE_FORMAT = 'obst-tycoon-save';
@@ -18,13 +21,26 @@ export class SaveError extends Error {}
 
 type Migration = (state: Record<string, unknown>) => Record<string, unknown>;
 
+/**
+ * Version 3 ist das vereinfachte Spiel (Kisten, selbstständige Verkäufer, Eroberung der Viertel).
+ * Ältere Stände werden übernommen, soweit es passt: Tag, Geld (mindestens das Startkapital) und die Zahl der Verkäufer.
+ */
+function toVersion3(raw: Record<string, unknown>): Record<string, unknown> {
+  const world = getWorld();
+  const seed = typeof raw.seed === 'number' ? raw.seed : 1;
+  const fresh = createInitialState(world, { seed, ambient: raw.ambient !== false });
+  if (typeof raw.day === 'number' && raw.day >= 0) fresh.day = Math.floor(raw.day);
+  if (typeof raw.money === 'number' && Number.isFinite(raw.money)) fresh.money = Math.max(START.money, Math.round(raw.money));
+  const staff = Array.isArray(raw.staff) ? raw.staff.length : 0;
+  while (fresh.dealers.length < Math.min(staff, spotCapacity(fresh, world))) createDealer(fresh, world);
+  return fresh as unknown as Record<string, unknown>;
+}
+
 /** migrations[v] hebt einen Spielstand von Version v auf v + 1. */
 export const migrations: Record<number, Migration> = {
-  // Version 1 (M1) kannte noch keine Wirtschaft: Startkapital, Startbestand und Startverkäufer ergänzen.
-  1: (raw) => {
-    initEconomy(raw as unknown as GameState, getWorld());
-    return raw;
-  },
+  // Version 1 (M1) und 2 (M2) hatten das ausführliche Wirtschaftsmodell.
+  1: (raw) => raw,
+  2: toVersion3,
 };
 
 export function serialize(state: GameState, label: string): string {
@@ -92,12 +108,11 @@ export function validateState(s: GameState): void {
   if (typeof s.dayTick !== 'number') fail('Uhrzeit');
   if (typeof s.rng !== 'number' || typeof s.ambientRng !== 'number') fail('Zufallsgenerator');
   if (!Array.isArray(s.peds) || !Array.isArray(s.vehicles)) fail('Passanten');
-  if (!s.warehouse || !Array.isArray(s.warehouse.rooms)) fail('Lager');
   if (!Array.isArray(s.queue)) s.queue = [];
   if (!Array.isArray(s.messages)) s.messages = [];
-  if (s.phase !== 'day' && s.phase !== 'dayEnd') fail('Phase');
   if (typeof s.money !== 'number' || !Number.isFinite(s.money)) fail('Kontostand');
-  if (!Array.isArray(s.staff) || !Array.isArray(s.crates) || !Array.isArray(s.orders)) fail('Personal oder Lager');
-  if (!s.marketFactors || !s.priceFactors || !s.ledger) fail('Großmarkt');
-  if (!Array.isArray(s.reports)) s.reports = [];
+  if (!Array.isArray(s.dealers) || !Array.isArray(s.crates) || !Array.isArray(s.districts)) fail('Verkäufer oder Lager');
+  if (typeof s.shelves !== 'number' || typeof s.fighters !== 'number') fail('Lager oder Kämpfer');
+  if (!s.stats) fail('Statistik');
+  if (!Array.isArray(s.history)) s.history = [];
 }

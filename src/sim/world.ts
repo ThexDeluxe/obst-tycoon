@@ -1,5 +1,5 @@
 // Statische Spielwelt, aus den Kartendaten abgeleitet. Gehört nicht zum Spielstand.
-import { DISTRICT_IDS, SPOT_FACTORS, type DistrictId, type PathMode } from '../data/balance';
+import { DISTRICT_IDS, type DistrictId, type PathMode } from '../data/balance';
 import * as MAP from '../data/map';
 
 export const TILE = {
@@ -23,6 +23,11 @@ export type BuildingStyle =
   | 'uni'
   | 'mensa'
   | 'office'
+  | 'store'
+  | 'tower'
+  | 'church'
+  | 'garage'
+  | 'subway'
   | 'fountain'
   | 'fence'
   | 'tree'
@@ -42,19 +47,28 @@ interface StyleInfo {
 export const BUILDING_CHARS: Record<string, StyleInfo> = {
   R: { style: 'rowhouse', height: 1.7, vary: 0.5 },
   r: { style: 'rowhouse', height: 1.7, vary: 0.5 },
-  B: { style: 'brick', height: 3.2, vary: 1.6 },
-  b: { style: 'brick', height: 3.2, vary: 1.6 },
-  P: { style: 'plaster', height: 2.8, vary: 1.6 },
-  p: { style: 'plaster', height: 2.8, vary: 1.6 },
-  L: { style: 'shop', height: 2.4, vary: 1.0 },
-  l: { style: 'shop', height: 2.4, vary: 1.0 },
+  B: { style: 'brick', height: 3.5, vary: 2.5 },
+  b: { style: 'brick', height: 3.5, vary: 2.5 },
+  P: { style: 'plaster', height: 4, vary: 3 },
+  p: { style: 'plaster', height: 4, vary: 3 },
+  L: { style: 'shop', height: 3, vary: 1.5 },
+  l: { style: 'shop', height: 3, vary: 1.5 },
+  D: { style: 'store', height: 5.5, vary: 2.5 },
+  d: { style: 'store', height: 5.5, vary: 2.5 },
+  X: { style: 'tower', height: 13, vary: 6 },
+  x: { style: 'tower', height: 11, vary: 5 },
+  Y: { style: 'tower', height: 22, vary: 0 },
   S: { style: 'station', height: 3.4, vary: 0 },
-  H: { style: 'hall', height: 2.6, vary: 0.8 },
-  h: { style: 'hall', height: 2.6, vary: 0.8 },
-  U: { style: 'uni', height: 3.6, vary: 1.0 },
-  u: { style: 'uni', height: 3.6, vary: 1.0 },
+  K: { style: 'church', height: 4.5, vary: 0 },
+  H: { style: 'hall', height: 2.8, vary: 0.8 },
+  h: { style: 'hall', height: 2.8, vary: 0.8 },
+  G: { style: 'garage', height: 1.3, vary: 0.3 },
+  g: { style: 'garage', height: 1.3, vary: 0.3 },
+  U: { style: 'uni', height: 4, vary: 1.5 },
+  u: { style: 'uni', height: 4, vary: 1.5 },
   M: { style: 'mensa', height: 1.8, vary: 0 },
   A: { style: 'office', height: 3.0, vary: 0 },
+  E: { style: 'subway', height: 0.6, vary: 0 },
   F: { style: 'fountain', height: 0.35, vary: 0 },
   Z: { style: 'fence', height: 0.6, vary: 0 },
   T: { style: 'tree', height: 0, vary: 0 },
@@ -95,8 +109,21 @@ export interface Spot {
   tile: number;
   district: DistrictId;
   districtIndex: number;
-  factor: number;
-  parking: boolean;
+}
+
+export interface WarehouseInfo {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  hall: { x: number; y: number; w: number; h: number };
+  yard: { x: number; y: number; w: number; h: number };
+  office: { x: number; y: number; w: number; h: number };
+  doorX: number;
+  doorY: number;
+  door: number;
+  doorWidth: number;
+  shelfSlots: [number, number][];
 }
 
 export interface CarRoute {
@@ -118,7 +145,13 @@ export interface World {
   buildings: Building[];
   district: Uint8Array;
   spots: Spot[];
-  warehouse: { x: number; y: number; w: number; h: number; doorX: number; doorY: number; door: number };
+  warehouse: WarehouseInfo;
+  /** links[a][b]: Viertel a und b grenzen aneinander */
+  links: boolean[][];
+  /** Ankerpunkt des Schildes je Viertel (Index wie DISTRICT_IDS) */
+  labels: [number, number][];
+  /** Felder je Viertel (alle Bodenfelder, für die Markierung feindlicher Gebiete) */
+  districtTiles: number[][];
   costs: Record<PathMode, Float32Array>;
   /** Begehbare Felder je Viertel, für das Erzeugen von Passanten */
   footTilesByDistrict: number[][];
@@ -267,7 +300,7 @@ export function createWorld(): World {
     mixed[i] = t === TILE.ROAD || t === TILE.CROSSWALK ? 1 : t === TILE.SIDEWALK || t === TILE.PLAZA ? 1.15 : 0;
   }
 
-  const wh = MAP.WAREHOUSE_LOT;
+  const wh = MAP.WAREHOUSE;
   const door = wh.door[1] * w + wh.door[0];
   // Das Lagertor ist für alle Wegearten erreichbar
   foot[door] = 1;
@@ -285,8 +318,6 @@ export function createWorld(): World {
       tile,
       district: s.district,
       districtIndex: DISTRICT_IDS.indexOf(s.district),
-      factor: SPOT_FACTORS[s.id] ?? 1,
-      parking: !!s.parking,
     };
   });
 
@@ -309,6 +340,15 @@ export function createWorld(): World {
     }
   }
 
+  const links = DISTRICT_IDS.map(() => DISTRICT_IDS.map(() => false));
+  for (const [a, b] of MAP.DISTRICT_LINKS) {
+    const ia = DISTRICT_IDS.indexOf(a);
+    const ib = DISTRICT_IDS.indexOf(b);
+    links[ia][ib] = links[ib][ia] = true;
+  }
+  const districtTiles: number[][] = DISTRICT_IDS.map(() => []);
+  for (let i = 0; i < n; i++) districtTiles[district[i]].push(i);
+
   return {
     w,
     h,
@@ -318,7 +358,23 @@ export function createWorld(): World {
     buildings,
     district,
     spots,
-    warehouse: { x: wh.x, y: wh.y, w: wh.w, h: wh.h, doorX: wh.door[0], doorY: wh.door[1], door },
+    warehouse: {
+      x: wh.lot.x,
+      y: wh.lot.y,
+      w: wh.lot.w,
+      h: wh.lot.h,
+      hall: wh.hall,
+      yard: wh.yard,
+      office: wh.office,
+      doorX: wh.door[0],
+      doorY: wh.door[1],
+      door,
+      doorWidth: wh.doorWidth,
+      shelfSlots: wh.shelfSlots,
+    },
+    links,
+    labels: DISTRICT_IDS.map((d) => MAP.DISTRICT_LABELS[d]),
+    districtTiles,
     costs: { foot, mixed, road },
     footTilesByDistrict,
     carRoutes: MAP.CAR_ROUTES.map((r) => buildRoute(r)),

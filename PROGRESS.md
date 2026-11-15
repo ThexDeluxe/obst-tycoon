@@ -33,3 +33,15 @@
 ## Nächste Schritte
 
 - M3 Gewerbeaufsicht und Aufklärung.
+
+## Neuausrichtung: vereinfachtes Spiel (Version 2 der Spezifikation)
+
+- Neue Großstadtkarte 96 × 96 mit sechs Vierteln: Untergrund, Bahnhofsviertel, Altstadt, Szeneviertel, Einkaufsmeile, Bankenviertel (Glastürme, Hubschrauberlandeplatz).
+- Geräumige Lagerhalle mit 12 Regalplätzen, Plus mit Preis über dem nächsten freien Platz, Kisten in Sortenfarben, Büro, Gabelstapler; Hof mit Sandsack für die Straßenkämpfer.
+- Obst kistenweise mit einem Tippen, sechs Sorten über Eroberungen freigeschaltet.
+- Verkäufer arbeiten selbstständig (Platzwahl, Stand mit Schirm, Nachschub), Ausrüstung für alle (Handkarren, Lastenräder).
+- Gang-Viertel rot markiert mit Schildern, Gangständen und Gangmitgliedern; Eroberung im Würfelduell mit Siegchance.
+- Aufträge als Einführung und Geschichte vom Untergrund ins Bankenviertel, Abschlussbild.
+- Schlanke Oberfläche: Geld, Auftrag, Tempo oben; Obst, Verkäufer, Kämpfer unten; kurze Blätter.
+- Spielstand Version 3 mit Migration aus Version 1 und 2.
+- Tests neu (35), Balancing-Bot neu, alle Korridore erfüllt.
