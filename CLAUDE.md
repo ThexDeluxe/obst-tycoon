@@ -1,8 +1,8 @@
 # Obst-Tycoon: Projektregeln
 
-Die Spezifikation steht in `SPEC.md` (Version 2, vereinfachtes Spiel: Kisten, selbstständige Verkäufer, Eroberung der Viertel im Würfelduell).
+Die Spezifikation steht in `SPEC.md` (Version 3, Obstmafia: Bauern, Lieferungen, Rückeroberung, Ermittler, Hauptquartier, Akte). Die Vorgängerfassung liegt in `docs/SPEC-v2.md`.
 Die ursprüngliche, ausführlichere Fassung liegt in `docs/SPEC-v1.md` und gilt nur noch für Technik und Projektregeln.
-Leitlinie des Auftraggebers: einfach, sofort verständlich, ohne überladene Oberfläche, soll Spaß machen.
+Leitlinie des Auftraggebers: einfach, sofort verständlich, ohne überladene Oberfläche, soll Spaß machen. Keine Einzelsteuerung von Personen, jede Entscheidung mit höchstens zwei Tipps am Handy.
 Vor jedem Commit: `npm test` grün, `npm run build` und `npm run lint` ohne Fehler.
 
 ## Regeln (aus der ersten Spezifikation, Abschnitt 2)
@@ -10,7 +10,7 @@ Vor jedem Commit: `npm test` grün, `npm run build` und `npm run lint` ohne Fehl
 - UI-Texte und Code-Kommentare auf Deutsch mit echten Umlauten (ä, ö, ü, ß). Bezeichner im Code auf Englisch.
 - Keine Emojis, an keiner Stelle. Symbole sind eigene SVG-Icons (`src/ui/icons.tsx`).
 - In Texten und Kommentaren keine Gedankenstriche als Ersatz für Kommas.
-- Ton nüchtern und sachlich wie in klassischen Wirtschaftssimulationen. Keine Witze, keine Comic-Effekte.
+- Ton: augenzwinkernde Obstmafia-Geschichte, trocken und knapp, nicht albern. Gewalt nur angedeutet, nie gezeigt.
 - Keine Abhängigkeiten von einem CDN. Alles kommt über npm, der Build läuft offline.
 - Alle Spielwerte stehen zentral in `src/data/balance.ts`. Nirgendwo sonst stehen Zahlen fürs Balancing.
 - Das Spiel läuft nur weiter, solange gespielt wird: kein Fortschritt offline, ein verborgener Tab pausiert das Spiel.
