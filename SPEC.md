@@ -258,6 +258,31 @@ Kontostand, Datum und Uhrzeit, Lagerampel, Ermittlungsdruck, Tempo, Zahnrad.
 - **Figuren:** Bauern, der Gang-Boss, der Ermittler und dein Anwalt tauchen in Meldungen mit Namen und einem gezeichneten Porträt auf (eigene SVG, kein Emoji). Sie erinnern sich an frühere Entscheidungen, zum Beispiel „Bauer Henning hat die gefälschten Bodenproben nicht vergessen“.
 - **Einführung:** Die bestehenden Aufträge werden umgeschrieben, sodass sie die neuen Systeme nacheinander einführen. Zuerst ein Vertrag, dann die Lagerampel, dann der erste Druck auf einen Bauern, dann die erste Verteidigung.
 
+### 11.4 Toneffekte
+
+- **Technik:** Web Audio API über ein eigenes kleines Modul `src/audio/`, ohne externe Bibliothek. Töne entstehen entweder per Synthese im Code oder stammen aus CC0-Paketen (zum Beispiel Kenney Audio), die im Repository liegen. Kein Laden aus dem Netz. Das Modul hört nur auf Ereignisse aus der Simulation und importiert nichts aus `src/sim/`, das umgekehrt etwas von ihm wüsste.
+- **Am Handy:** Der Ton startet erst nach dem ersten Tipp (Vorgabe der Browser). Verlässt man die App oder pausiert das Spiel, verstummt alles sofort.
+- **Einstellungen:** Effekte und Umgebung getrennt regelbar, dazu ein Stummschalter direkt in der oberen Leiste. Die Wahl wird gespeichert.
+- **Dosierung:** Häufige Töne sind leise und kurz und werden gebündelt. Bei vielen Verkäufen gleichzeitig klingt höchstens ein Kassenton pro halbe Sekunde. Bei 4x werden Umgebungsgeräusche leiser und seltene Töne bleiben normal.
+- **Ereignisse und Töne:**
+
+| Ereignis | Ton |
+|---|---|
+| Verkauf | leises Kassenklingeln |
+| Lieferwagen kommt an | Motor, Bremse, Kisten werden abgestellt |
+| Lagerampel springt auf Rot | kurzer, tiefer Warnton |
+| Antippen von Knöpfen, Blätter öffnen und schließen | dezentes Klicken und Wischen |
+| Etage oder Regal gebaut | Hämmern, dann ein kurzer Abschlussklang |
+| Vertrag abgeschlossen | Stempel auf Papier |
+| Aktion bei einem Bauern gelungen oder misslungen | zwei unterschiedliche kurze Klänge |
+| Schmutzige Aktion | gedämpfter, tiefer Klang |
+| Würfelduell | Würfelrollen, eigener Klang für gewonnene und verlorene Runde |
+| Viertel erobert oder verloren | kurze Fanfare oder dumpfer Abschluss |
+| Gegenangriff droht, Lieferung überfallen | Alarmton |
+| Ermittlungsdruck steigt eine Stufe | Sirene in der Ferne |
+| Akt abgeschlossen | längere Erfolgsmelodie |
+| Umgebung | leiser Stadtlärm, der der Tageszeit und der Zahl der Passanten folgt, nachts Grillen |
+
 ## 12. Balancing und Prüfungen
 
 - Der Balancing-Bot wird auf die neuen Systeme erweitert und spielt drei Strategien, jeweils über 120 Spieltage:
@@ -275,12 +300,14 @@ Kontostand, Datum und Uhrzeit, Lagerampel, Ermittlungsdruck, Tempo, Zahnrad.
 
 ## 13. Meilensteine
 
-1. **M7 Lager:** Lieferungen statt Sofortkauf, Kiosk als Notlösung, Verderb und Kühlung, Reichweite, Lagerampel, Lagerblatt, Sättigung, Vertriebsqualität.
+1. **M7 Lager:** Lieferungen statt Sofortkauf, Kiosk als Notlösung, Verderb und Kühlung, Reichweite, Lagerampel, Lagerblatt, Sättigung, Vertriebsqualität. Dazu das Tonmodul mit Einstellungen und den Tönen für Verkauf, Lieferung, Lagerampel und Bedienung.
 2. **M8 Bauern:** Umlandkarte, Hof-Karten, Verträge, Aktionen, Ereignisse, Figuren.
 3. **M9 Kosten und Gebiete:** Löhne und Miete, Pleite, Kontrolle, Stationierungsstufen, Gegenangriffe, Lieferkette als Waffe.
 4. **M10 Ermittler:** Ermittlungsdruck, Stufen, Gegenmittel.
 5. **M11 Hauptquartier:** Etagen von Akt 1 und 2 als Hochhaus-Ansicht.
 6. **M12 Akt 2:** herausgezoomte Stadt, Läden, Fuhrpark, Übergang zwischen den Akten, Abschlussbild.
 7. **M13 Akte 3 bis 5:** Knotenkarte, weitere Rivalen, restliche Etagen, Endlosspiel.
+
+Jeder weitere Meilenstein bringt die Töne für seine eigenen Ereignisse mit.
 
 Nach jedem Meilenstein: Tests grün, Build und Lint ohne Fehler, Bot-Ergebnis in `PROGRESS.md`, Commit, GitHub Pages aktualisiert. Nach M8 anhalten und auf Rückmeldung warten, weil Lager und Bauern zusammen das neue Herzstück sind.
