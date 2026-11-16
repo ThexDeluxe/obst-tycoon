@@ -17,6 +17,8 @@ import { STORY } from '../src/sim/story';
 import { ampelFor, fruitRange, stockAmpel } from '../src/sim/supply';
 import type { GameState } from '../src/sim/types';
 import { createWorld } from '../src/sim/world';
+import { giveContract } from './helpers';
+import { cratePrice } from '../src/sim/farms';
 
 const world = createWorld();
 const out = createStepOutput();
@@ -97,31 +99,32 @@ describe('Verderb und Kühlung', () => {
 });
 
 describe('Lieferungen', () => {
-  it('Daueraufträge kommen jeden Morgen und werden beim Abladen bezahlt', () => {
+  it('Verträge liefern jeden Morgen, bezahlt wird beim Abladen', () => {
     const s = fresh(2);
     s.dealers = [];
     s.money = 1000;
-    run(s, { type: 'setOrder', fruit: 'apple', crates: 5 });
+    s.story = STORY.length;
+    const farm = giveContract(s, 'apple', 5);
     const money = s.money;
     const before = count(s, 'apple');
     nextMorning(s);
     expect(count(s, 'apple')).toBe(before + 5);
-    expect(s.money).toBeCloseTo(money - 5 * FRUITS.apple.crateCost, 6);
+    expect(s.money).toBeCloseTo(money - 5 * cratePrice(s, farm, 'apple'), 6);
   });
 
   it('was nicht ins Lager passt, kommt mit der nächsten Lieferung', () => {
     const s = fresh(3);
     s.dealers = [];
     s.money = 5000;
-    run(s, { type: 'setOrder', fruit: 'apple', crates: 20 });
+    const farm = giveContract(s, 'apple', 12);
     nextMorning(s);
     expect(s.crates.length).toBe(12);
-    const left = 20 - (12 - STOCK.startCrates[0].crates);
+    const left = 12 - (12 - STOCK.startCrates[0].crates);
     expect(s.backlog).toHaveLength(left);
     expect(s.messages.some((m) => m.text.startsWith('Lager voll'))).toBe(true);
     // Rückstand höchstens eine Tageslieferung, Platz schaffen und am nächsten Morgen kommt er zuerst
     s.crates.splice(0, 12);
-    run(s, { type: 'setOrder', fruit: 'apple', crates: 0 });
+    s.farms[farm].contract = null;
     nextMorning(s);
     expect(s.crates.length).toBe(left);
     expect(s.backlog).toHaveLength(0);
@@ -130,7 +133,7 @@ describe('Lieferungen', () => {
   it('ohne Geld nimmt der Fahrer die Ware wieder mit', () => {
     const s = fresh(4);
     s.dealers = [];
-    run(s, { type: 'setOrder', fruit: 'apple', crates: 3 });
+    giveContract(s, 'apple', 3);
     s.money = 0;
     nextMorning(s);
     expect(s.money).toBeGreaterThanOrEqual(0);
@@ -181,9 +184,21 @@ describe('Sättigung und Aufpreis', () => {
       s.upgrade = 1;
       s.money = 1e9;
       while (s.dealers.length < 12) run(s, { type: 'hireDealer' });
-      for (const f of FRUIT_IDS) run(s, { type: 'setOrder', fruit: f, crates: orders[f] ?? 0 });
       const start = s.money;
-      for (let d = 0; d < 4; d++) nextMorning(s);
+      // Nachschub jeden Morgen zum Grundpreis, unabhängig von der Kapazität der Höfe
+      const refill = () => {
+        for (const f of FRUIT_IDS) {
+          for (let k = 0; k < (orders[f] ?? 0); k++) {
+            if (!storeCrate(s, f, 2)) break;
+            s.money -= FRUITS[f].crateCost;
+          }
+        }
+      };
+      refill();
+      for (let d = 0; d < 4; d++) {
+        nextMorning(s);
+        refill();
+      }
       ticks(s, TICKS_PER_DAY - TICKS_PER_HOUR);
       return s.money - start;
     };
@@ -223,7 +238,7 @@ describe('Reichweite und Lagerampel', () => {
     expect(r.days).toBeCloseTo(CRATE_UNITS / 80, 5);
     expect(stockAmpel(s).ampel).toBe('red');
     // Jeden Morgen 4 Kisten (80 Stück): Der Bestand hält über die Vorausschau hinaus
-    run(s, { type: 'setOrder', fruit: 'apple', crates: 4 });
+    giveContract(s, 'apple', 4);
     expect(fruitRange(s, 'apple').days).toBeGreaterThan(STOCK.ampelGreen);
     expect(stockAmpel(s).ampel).toBe('green');
   });
@@ -234,7 +249,7 @@ describe('Reichweite und Lagerampel', () => {
     nextMorning(idle);
     expect(idle.crates).toHaveLength(0);
     const supplied = fresh(6);
-    run(supplied, { type: 'setOrder', fruit: 'apple', crates: 6 });
+    giveContract(supplied, 'apple', 6);
     for (let d = 0; d < 4; d++) {
       nextMorning(supplied);
       expect(supplied.crates.length).toBeGreaterThan(0);
@@ -253,8 +268,14 @@ describe('Vertriebsqualität', () => {
       s.money = 1e9;
       s.salesQuality = quality;
       while (s.dealers.length < 6) run(s, { type: 'hireDealer' });
-      for (const f of ['apple', 'banana', 'strawberry', 'grape'] as FruitId[]) run(s, { type: 'setOrder', fruit: f, crates: 9 });
-      for (let d = 0; d < 3; d++) nextMorning(s);
+      const refill = () => {
+        for (const f of ['apple', 'banana', 'strawberry', 'grape'] as FruitId[]) for (let k = 0; k < 9; k++) storeCrate(s, f, 2);
+      };
+      refill();
+      for (let d = 0; d < 3; d++) {
+        nextMorning(s);
+        refill();
+      }
       return s.earnedTotal;
     };
     expect(play(0.95)).toBeGreaterThan(play(0.3));

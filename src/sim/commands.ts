@@ -1,15 +1,16 @@
 // Befehle an die Simulation. Oberfläche und Balancing-Bot nutzen dieselben Befehle.
 // Sie landen in einer Warteschlange und werden im nächsten Tick ausgeführt.
-import { DISTRICT_IDS, FIGHTERS, FRUITS, STOCK, WHOLESALER, type FruitId } from '../data/balance';
+import { DISTRICT_IDS, FIGHTERS, FRUITS, KIOSK_QUALITY, STOCK, type FarmActionId, type FruitId } from '../data/balance';
 import { FRUIT_NAMES, UPGRADE_NAMES } from '../data/names';
 import { battleAuto, battleRetreat, battleRound, startBattle } from './battle';
 import { createDealer } from './dealers';
+import { cancelContract, offerContract, performAction, renewContract, resolveEvent, withdrawGuards, type Offer } from './farms';
 import { assignCooling, storeCrate } from './stock';
 import {
   capacity,
   dealerCost,
   fighterCost,
-  isFruitUnlocked,
+  isFruitAvailable,
   maxShelves,
   nextUpgrade,
   shelfCost,
@@ -20,7 +21,12 @@ import type { World } from './world';
 
 export type Command =
   | { type: 'kioskBuy'; fruit: FruitId }
-  | { type: 'setOrder'; fruit: FruitId; crates: number }
+  | { type: 'offerContract'; farm: number; offer: Offer }
+  | { type: 'renewContract'; farm: number }
+  | { type: 'cancelContract'; farm: number }
+  | { type: 'farmAction'; farm: number; action: FarmActionId }
+  | { type: 'withdrawGuards'; farm: number }
+  | { type: 'answerEvent'; id: number; choice: 0 | 1 }
   | { type: 'buyColdRoom' }
   | { type: 'hireDealer' }
   | { type: 'buyShelf' }
@@ -65,22 +71,39 @@ function pay(s: GameState, amount: number): boolean {
 export function applyCommand(s: GameState, world: World, cmd: Command, cue: (c: Cue) => void = () => {}): void {
   switch (cmd.type) {
     case 'kioskBuy': {
-      if (!isFruitUnlocked(s, cmd.fruit)) return fail(s, `${FRUIT_NAMES[cmd.fruit]} gibt es am Kiosk erst nach der nächsten Eroberung.`);
+      if (!isFruitAvailable(s, cmd.fruit)) return fail(s, `${FRUIT_NAMES[cmd.fruit]} hat nur die Gemüsegang. Der Kiosk kommt nicht ran.`);
       if (s.kioskToday >= STOCK.kioskPerDay) return fail(s, `Der Kiosk gibt höchstens ${STOCK.kioskPerDay} Kisten pro Tag ab.`);
       if (capacity(s) <= s.crates.length) return fail(s, 'Das Lager ist voll. Tippe auf das Plus im Lager, um ein Regal dazuzukaufen.');
       const price = FRUITS[cmd.fruit].crateCost * STOCK.kioskFactor;
       if (!pay(s, price)) return;
-      storeCrate(s, cmd.fruit, WHOLESALER.quality);
+      storeCrate(s, cmd.fruit, KIOSK_QUALITY);
       s.kioskToday++;
-      s.stats.cratesBought++;
       assignCooling(s);
       break;
     }
-    case 'setOrder': {
-      if (!isFruitUnlocked(s, cmd.fruit)) return fail(s, `${FRUIT_NAMES[cmd.fruit]} liefert der Großhändler erst nach der nächsten Eroberung.`);
-      s.orders[cmd.fruit] = Math.max(0, Math.min(WHOLESALER.maxCratesPerFruit, Math.round(cmd.crates)));
+    case 'offerContract':
+      if (!s.farms[cmd.farm]) return;
+      offerContract(s, cmd.farm, cmd.offer, pushMessage, cue);
       break;
-    }
+    case 'renewContract':
+      if (!s.farms[cmd.farm]) return;
+      renewContract(s, cmd.farm, pushMessage, cue);
+      break;
+    case 'cancelContract':
+      if (!s.farms[cmd.farm]) return;
+      cancelContract(s, cmd.farm, pushMessage);
+      break;
+    case 'farmAction':
+      if (!s.farms[cmd.farm]) return;
+      performAction(s, cmd.farm, cmd.action, pushMessage, cue);
+      break;
+    case 'withdrawGuards':
+      if (!s.farms[cmd.farm]) return;
+      withdrawGuards(s, cmd.farm);
+      break;
+    case 'answerEvent':
+      resolveEvent(s, cmd.id, cmd.choice, pushMessage, cue);
+      break;
     case 'buyColdRoom': {
       if (s.coldRoom) return;
       if (!pay(s, STOCK.coldRoomCost)) return;

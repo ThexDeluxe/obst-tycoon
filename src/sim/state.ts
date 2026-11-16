@@ -1,13 +1,14 @@
 // Anlegen eines neuen Spielstands.
-import { DISTRICT_IDS, DISTRICTS, SALES_QUALITY, START, STOCK, WHOLESALER } from '../data/balance';
+import { DISTRICT_IDS, DISTRICTS, KIOSK_QUALITY, SALES_QUALITY, START, STOCK } from '../data/balance';
 import { initAmbient } from './ambient';
 import { createDealer } from './dealers';
+import { createFarms } from './farms';
 import { seedState } from './rng';
 import { emptyCounts } from './stock';
 import type { GameState } from './types';
 import type { World } from './world';
 
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 export interface NewGameOptions {
   seed?: number;
@@ -40,7 +41,6 @@ export function createInitialState(world: World, opts: NewGameOptions = {}): Gam
     coldRoom: false,
     delivery: null,
     backlog: [],
-    orders: emptyCounts(),
     kioskToday: 0,
     soldToday: emptyCounts(),
     salesDays: [],
@@ -56,13 +56,28 @@ export function createInitialState(world: World, opts: NewGameOptions = {}): Gam
       d === START.district ? { owner: 'player', gang: 0 } : { owner: 'gang', gang: DISTRICTS[d].garrison },
     ),
     battle: null,
+    farms: createFarms(),
+    pending: [],
+    heat: 0,
+    heatDay: -99,
     story: 0,
     won: false,
-    stats: { cratesBought: 0, sold: 0, battlesWon: 0, battlesLost: 0, fightersLost: 0, gangDefeated: 0 },
+    stats: {
+      cratesBought: 0,
+      contracts: 0,
+      actions: 0,
+      pressureActions: 0,
+      dirtyActions: 0,
+      sold: 0,
+      battlesWon: 0,
+      battlesLost: 0,
+      fightersLost: 0,
+      gangDefeated: 0,
+    },
   };
   for (let i = 0; i < START.dealers; i++) createDealer(state, world);
   for (const sc of STOCK.startCrates) {
-    for (let i = 0; i < sc.crates; i++) state.crates.push({ id: state.nextId++, fruit: sc.fruit, fresh: 1, quality: WHOLESALER.quality, cooled: false });
+    for (let i = 0; i < sc.crates; i++) state.crates.push({ id: state.nextId++, fruit: sc.fruit, fresh: 1, quality: KIOSK_QUALITY, cooled: false });
   }
   initAmbient(state, world);
   return state;

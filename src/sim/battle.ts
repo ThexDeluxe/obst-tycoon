@@ -1,8 +1,8 @@
 // Würfelduell um ein Viertel: Der Angreifer würfelt mit bis zu drei Würfeln, die Gang mit bis zu zwei.
 // Die höchsten Würfel werden paarweise verglichen; wer niedriger liegt, verliert einen Kämpfer,
 // bei Gleichstand gewinnt die Gang.
-import { BATTLE, DISTRICT_IDS, FRUIT_IDS, FRUITS } from '../data/balance';
-import { DISTRICT_NAMES, FRUIT_NAMES } from '../data/names';
+import { BATTLE, DISTRICT_IDS } from '../data/balance';
+import { DISTRICT_NAMES } from '../data/names';
 import { rand } from './rng';
 import { isAttackable } from './selectors';
 import type { BattleRoll, GameState, MessageKind } from './types';
@@ -84,8 +84,7 @@ function finish(s: GameState, world: World, result: 'won' | 'lost' | 'retreated'
     s.districts[b.district] = { owner: 'player', gang: 0 };
     s.fighters += b.attackers;
     s.stats.battlesWon++;
-    const fruits = FRUIT_IDS.filter((f) => FRUITS[f].unlock === DISTRICT_IDS[b.district]).map((f) => FRUIT_NAMES[f]);
-    push(s, 'unlock', `${name} erobert.${fruits.length ? ` Neu beim Großhändler: ${fruits.join(', ')}.` : ''}`, lx, ly);
+    push(s, 'unlock', `${name} erobert. Deine Verkäufer finden dort neue Plätze.`, lx, ly);
     if (DISTRICT_IDS[b.district] === 'banking') s.won = true;
   } else {
     s.districts[b.district].gang = Math.max(0, b.defenders);

@@ -4,13 +4,14 @@ import { deserialize, SaveError, serialize } from '../src/save/format';
 import { createInitialState, STATE_VERSION } from '../src/sim/state';
 import { createStepOutput, step } from '../src/sim/step';
 import { createWorld } from '../src/sim/world';
+import { giveContract } from './helpers';
 
 const world = createWorld();
 
 describe('Speichern und Laden', () => {
   it('der Zustand nach dem Laden ist identisch und läuft deterministisch weiter', () => {
     const s = createInitialState(world, { seed: 11 });
-    s.queue.push({ type: 'setOrder', fruit: 'apple', crates: 4 });
+    giveContract(s, 'apple', 4);
     const out = createStepOutput();
     for (let i = 0; i < 600; i++) step(s, world, out);
     const copy = deserialize(serialize(s, 'Test')).state;

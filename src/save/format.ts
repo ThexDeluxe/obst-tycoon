@@ -1,7 +1,8 @@
 // Speicherformat: JSON mit Versionsnummer und einer Migrationsfunktion pro Version.
 // Diese Datei hat keine Abhängigkeit zum Browser und wird in den Tests geprüft.
-import { DISTRICT_IDS, SALES_QUALITY, START, WHOLESALER } from '../data/balance';
+import { DISTRICT_IDS, KIOSK_QUALITY, SALES_QUALITY, START } from '../data/balance';
 import { createDealer } from '../sim/dealers';
+import { createFarms } from '../sim/farms';
 import { spotCapacity } from '../sim/selectors';
 import { emptyCounts } from '../sim/stock';
 import type { GameState } from '../sim/types';
@@ -43,12 +44,12 @@ function toVersion3(raw: Record<string, unknown>): Record<string, unknown> {
  */
 function toVersion4(raw: Record<string, unknown>): Record<string, unknown> {
   const s = raw as unknown as GameState & { crates: { id: number; fruit: string }[] };
-  s.crates = (s.crates ?? []).map((c) => ({ id: c.id, fruit: c.fruit as GameState['crates'][number]['fruit'], fresh: 1, quality: WHOLESALER.quality, cooled: false }));
-  for (const d of s.dealers ?? []) d.load = (d.load ?? []).map((l) => ({ ...l, fresh: 1, quality: WHOLESALER.quality }));
+  s.crates = (s.crates ?? []).map((c) => ({ id: c.id, fruit: c.fruit as GameState['crates'][number]['fruit'], fresh: 1, quality: KIOSK_QUALITY, cooled: false }));
+  for (const d of s.dealers ?? []) d.load = (d.load ?? []).map((l) => ({ ...l, fresh: 1, quality: KIOSK_QUALITY }));
   s.coldRoom = false;
   s.delivery = null;
   s.backlog = [];
-  s.orders = emptyCounts();
+  (s as unknown as { orders: unknown }).orders = emptyCounts();
   s.kioskToday = 0;
   s.soldToday = emptyCounts();
   s.salesDays = [];
@@ -62,12 +63,31 @@ function toVersion4(raw: Record<string, unknown>): Record<string, unknown> {
   return raw;
 }
 
+/**
+ * Version 5 (M8): Höfe statt Großhändler. Die Daueraufträge entfallen, die Höfe starten im Ausgangszustand,
+ * die Aufträge beginnen von vorn (erledigte werden sofort nachgeholt).
+ */
+function toVersion5(raw: Record<string, unknown>): Record<string, unknown> {
+  const s = raw as unknown as GameState & { orders?: unknown };
+  delete s.orders;
+  s.farms = createFarms();
+  s.pending = [];
+  s.heat = 0;
+  s.heatDay = -99;
+  s.backlog = [];
+  s.delivery = null;
+  s.stats = Object.assign({ contracts: 0, actions: 0, pressureActions: 0, dirtyActions: 0 }, s.stats ?? {}) as GameState['stats'];
+  s.story = 0;
+  return raw;
+}
+
 /** migrations[v] hebt einen Spielstand von Version v auf v + 1. */
 export const migrations: Record<number, Migration> = {
   // Version 1 (M1) und 2 (M2) hatten das ausführliche Wirtschaftsmodell.
   1: (raw) => raw,
   2: toVersion3,
   3: toVersion4,
+  4: toVersion5,
 };
 
 export function serialize(state: GameState, label: string): string {
@@ -142,5 +162,6 @@ export function validateState(s: GameState): void {
   if (typeof s.shelves !== 'number' || typeof s.fighters !== 'number') fail('Lager oder Kämpfer');
   if (!s.stats) fail('Statistik');
   if (!Array.isArray(s.history)) s.history = [];
-  if (!s.orders || !s.soldToday || !s.availToday || !Array.isArray(s.districtSold) || !Array.isArray(s.salesDays)) fail('Lager');
+  if (!s.soldToday || !s.availToday || !Array.isArray(s.districtSold) || !Array.isArray(s.salesDays)) fail('Lager');
+  if (!Array.isArray(s.farms) || !Array.isArray(s.pending) || typeof s.heat !== 'number') fail('Höfe');
 }

@@ -4,6 +4,7 @@ import { attractCustomer, stepAmbient } from './ambient';
 import { applyCommand, pushMessage, type Command } from './commands';
 import { stepDealers } from './dealers';
 import { plannedDeliveries, startDelivery, stepDelivery, type DeliveryEvents } from './delivery';
+import { farmsNewDay } from './farms';
 import { assignCooling, dayEstimate, disposeSpoiled, emptyCounts, stepFreshness, trackAvailability } from './stock';
 import { stepSales, type SaleEvent } from './sales';
 import { checkStory } from './story';
@@ -63,6 +64,7 @@ function newDay(s: GameState, out: StepOutput): void {
   s.day++;
   s.dayTick = 0;
   out.dayEnded = true;
+  farmsNewDay(s, pushMessage, (c) => out.cues.push(c));
   startMorning(s);
 }
 

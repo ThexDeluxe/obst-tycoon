@@ -1,5 +1,5 @@
 // Datentypen des Spielstands. Alles ist reines, serialisierbares JSON ohne Klasseninstanzen.
-import type { FruitId } from '../data/balance';
+import type { FarmActionId, FarmOwner, FruitId } from '../data/balance';
 import type { Command } from './commands';
 
 export interface Pedestrian {
@@ -99,6 +99,82 @@ export interface Delivery {
 /** Je Sorte eine Zahl */
 export type FruitCounts = Record<FruitId, number>;
 
+/** Vertrag mit einem Hof: läuft von allein, Lieferung jeden Morgen, bezahlt bei Lieferung */
+export interface Contract {
+  /** Kisten pro Tag je Sorte des Hofs */
+  crates: Partial<Record<FruitId, number>>;
+  /** Preis in Prozent vom Grundpreis */
+  pricePct: number;
+  /** Laufzeit in Tagen (3, 7 oder 14) */
+  days: number;
+  /** erster und letzter Liefertag */
+  startDay: number;
+  endDay: number;
+  exclusive: boolean;
+  /** Langfristig gebunden: Preis fest, kein Nachverhandeln */
+  priceLock: boolean;
+  /** Fester Preis je Sorte beim Binden */
+  lockedPrices: Partial<Record<FruitId, number>> | null;
+}
+
+/** Bedingungen eines Vertrags (Angebot, letzte Bedingungen zum Verlängern) */
+export interface ContractTerms {
+  crates: Partial<Record<FruitId, number>>;
+  pricePct: number;
+  days: number;
+  exclusive: boolean;
+}
+
+/** Erinnerungen eines Bauern an frühere Entscheidungen */
+export type FarmMemory = 'advance' | 'helpers' | 'hailHelp' | 'bind' | 'protect' | 'refuse' | 'soil' | 'hailPenalty' | 'cancel' | 'takeover';
+
+export interface FarmState {
+  owner: FarmOwner;
+  loyalty: number;
+  fear: number;
+  quality: number;
+  /** Aufschlag auf den Grundpreis durch Ereignisse (Bio-Siegel), Anteil */
+  priceBonus: number;
+  contract: Contract | null;
+  /** Letzte Bedingungen (für Vorschläge und Verlängern nach dem Auslaufen) */
+  lastTerms: ContractTerms | null;
+  /** Vorschuss, der mit den nächsten Lieferungen verrechnet wird (Euro) */
+  credit: number;
+  /** Schutz: so viele eigene Kämpfer stehen am Hof */
+  guards: number;
+  /** Erntehelfer bis einschließlich dieses Tages (-1: keine) */
+  helpersUntil: number;
+  helpers: number;
+  /** Hagel: Kapazität halbiert bis einschließlich dieses Tages */
+  hailUntil: number;
+  /** Gute Ernte: Zusatzkisten zum halben Preis mit der nächsten Lieferung */
+  bonusCrates: number;
+  /** Abnahme verweigert bis einschließlich dieses Tages */
+  refusedUntil: number;
+  /** Vom Lebensmittelamt geschlossen bis einschließlich dieses Tages */
+  closedUntil: number;
+  /** Helfer abgeworben: Kapazität für andere halbiert */
+  poached: boolean;
+  /** Zulassung verloren: verkauft nur noch an dich */
+  licenseLost: boolean;
+  /** Abklingzeit je Aktion: frühester Tag für die nächste Nutzung */
+  cooldowns: Partial<Record<FarmActionId, number>>;
+  /** Tag der letzten Druck- oder schmutzigen Aktion */
+  lastPressure: number;
+  /** Nach einer Absage: frühester Tag für das nächste Angebot */
+  talkDay: number;
+  memory: FarmMemory[];
+}
+
+/** Meldung mit zwei Antworten, wartet auf den Spieler */
+export interface PendingEvent {
+  id: number;
+  kind: 'contractEnd' | 'hail' | 'renegotiate' | 'harvest' | 'bio';
+  farm: number;
+  /** Tag, an dessen Ende die Meldung ohne Antwort verfällt */
+  day: number;
+}
+
 export type DealerMode = 'idle' | 'loading' | 'toSpot' | 'setup' | 'selling' | 'packing' | 'toWarehouse';
 
 export interface Dealer {
@@ -153,6 +229,10 @@ export interface Battle {
 
 export interface GameStats {
   cratesBought: number;
+  contracts: number;
+  actions: number;
+  pressureActions: number;
+  dirtyActions: number;
   sold: number;
   battlesWon: number;
   battlesLost: number;
@@ -190,8 +270,6 @@ export interface GameState {
   delivery: Delivery | null;
   /** Kisten, die nicht ins Lager passten und mit der nächsten Lieferung kommen */
   backlog: IncomingCrate[];
-  /** Daueraufträge beim Großhändler: Kisten pro Tag je Sorte */
-  orders: FruitCounts;
   kioskToday: number;
   /** Verkaufte Stück je Sorte heute; Tagesverkauf der letzten Tage, hochgerechnet auf einen ganzen Tag mit Ware */
   soldToday: FruitCounts;
@@ -211,6 +289,13 @@ export interface GameState {
   upgrade: number;
   districts: DistrictState[];
   battle: Battle | null;
+  /** Höfe im Umland (Reihenfolge wie FARMS) */
+  farms: FarmState[];
+  /** Meldungen, die auf eine Antwort warten */
+  pending: PendingEvent[];
+  /** Ermittlungsdruck 0..100 und Tag des letzten Anstiegs */
+  heat: number;
+  heatDay: number;
   /** Aktueller Auftrag (Index in der Geschichte) */
   story: number;
   won: boolean;

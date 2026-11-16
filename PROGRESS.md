@@ -73,3 +73,44 @@
 - Sortiment: Ein Lager nur mit Drachenfrüchten bringt 36 % weniger Gewinn als ein gemischtes (Test in `tests/stock.test.ts`).
 - Leerlauf: Ohne Lieferung ist das Lager spätestens nach zwei Tagen leer, mit Lieferung nicht (Test).
 - Nach dem Bankenviertel begrenzt die Halle (12 Regale, 72 Kisten) den Nachschub. Das ist für den ersten Akt gewollt; mehr Lieferungen bringt die Laderampe in Akt 2.
+
+## M8 Bauern: erledigt
+
+- Blatt „Höfe“ (fünfter Knopf unten) mit Umlandkarte: Stadt in der Mitte, sechs Höfe mit Straßen, Besitzer als Farbe (frei, Gang rot, eigener Hof grün), laufende Verträge gestrichelt.
+- Hof-Karte mit Porträt, Name, Eigenschaft (stur, ängstlich, gierig, ehrlich), Kapazität, Preisen je Sorte, Qualität in Sternen, Loyalität und Angst als Balken, letzter Erinnerung des Bauern. Jede Zahl ist antippbar.
+- Verträge: Kisten je Sorte bis zur Kapazität, Preis in Prozent, Laufzeit 3, 7 oder 14 Tage, exklusiv; Annahmechance vor dem Abschicken. Fertiges Angebot mit einem Tipp, Editor für eigene Bedingungen, Ändern, Kündigen, Verlängern mit einem Tipp.
+- Lieferungen kommen aus den Verträgen, bezahlt beim Abladen; Rückstand bei vollem Lager kostet Loyalität. Der Großhändler entfällt.
+- Neun Aktionen (sauber, Druck, schmutzig) mit Kosten, Chance, Wirkung und Druck auf dem Knopf, Abklingzeit zwei Tage, Misserfolge nach Abschnitt 5.3. Eigene Höfe liefern zu Erzeugerkosten.
+- Angst sinkt ohne neuen Druck, Loyalität wächst mit Verträgen, Verrat bei viel Angst und wenig Loyalität.
+- Ereignisse (Hagel, Nachverhandeln, gute Ernte, Bio-Siegel) als Meldungen mit Porträt und zwei Antworten.
+- Ermittlungsdruck in der Leiste oben (Folgen mit M10).
+- Lagerblatt: Lieferung morgen je Sorte aus den Verträgen, Antippen einer Sorte zeigt die Höfe mit Sprung zum Hof.
+- Aufträge neu: erster Vertrag, Umsatz, Lagerampel, Verstärkung, Platz, gemischte Ware, Kämpfer, erster Druck, dann die Viertel.
+- Töne: Stempel beim Vertrag, eigene Klänge für gelungene und misslungene Aktionen, tiefer Klang für schmutzige Aktionen, Alarm bei Verrat.
+- Spielstand Version 5 mit Migration aus Version 4.
+- Tests: 77 (neu in `tests/farms.test.ts`: Annahmechance, Vorschlag, Abschluss, Lieferung, Laufzeit, Verlängern, Absage, Rückstand, alle wichtigen Aktionen, Abklingzeit, Misserfolg, Angst, Verrat, Ermittlungsdruck, Ereignisse, Speichern, Migration).
+
+### Bot-Ergebnis M8
+
+`npm run balance` spielt drei Strategien über 120 Tage (Laufzeit je etwa 2,5 Sekunden). Eroberungstag des Bankenviertels:
+
+| Seed | sauber | gemischt | brutal |
+|---|---|---|---|
+| 1 | 19 | 22 | 26 |
+| 2 | 17 | 17 | 19 |
+| 3 | 18 | 18 | 19 |
+
+Seed 1 im Detail:
+
+| | sauber | gemischt | brutal |
+|---|---|---|---|
+| Bahnhofsviertel | Tag 6 | Tag 6 | Tag 6 |
+| Altstadt | Tag 12 | Tag 13 | Tag 14 |
+| Geld an Tag 20 | 2.176 € | 791 € | 1.728 € |
+| Geld an Tag 120 | 334.812 € | 319.206 € | 534.921 € |
+| Ermittlungsdruck höchstens | 0 | 19 | 51 |
+| Aktionen | Vorschuss 9, Binden 5 | Schutz 6, Vorschuss 9, Abwerben 1 | Bodenproben 3, Schutz 6, Vorschuss 26 |
+
+- Alle Korridore erfüllt: Bahnhofsviertel an Tag 2 bis 7, Bankenviertel an Tag 12 bis 30, Verkäufer ohne Ware unter 5 % der Stunden (solange Höfe und Lager mehr hergeben), sauber ohne Ermittlungsdruck, brutal wird beobachtet (ab 30).
+- Brutal verdient langfristig am meisten (billigere Ware durch Angst, Schutz und gefälschte Bodenproben), bezahlt aber mit hohem Ermittlungsdruck. Weil dessen Folgen erst mit M10 kommen, scheitert brutal noch an keiner Stufe; die Zielreihenfolge aus Abschnitt 12 (gemischt am schnellsten, brutal scheitert mindestens einmal) lässt sich erst danach prüfen.
+- Nach der Eroberung aller Viertel begrenzen die Höfe den Nachschub (44 Kisten am Tag ohne Gang-Höfe). Abends sind die Lager leer, die Ampel steht dann auf Rot. Laufende Kosten (M9) fehlen noch, deshalb wächst das Geld danach ungebremst.

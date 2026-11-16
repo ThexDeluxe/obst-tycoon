@@ -1,8 +1,8 @@
 // Inhalte der Blätter: Lager, Leute, Bauen, Akt und Viertel.
-import { DISTRICT_IDS, DISTRICTS, FIGHTERS, FRUIT_IDS, FRUITS, SATURATION, SHELVES, STOCK, UPGRADES, WHOLESALER, type FruitId } from '../data/balance';
-import { DISTRICT_NAMES, FRUIT_NAMES, UPGRADE_NAMES } from '../data/names';
+import { DISTRICT_IDS, DISTRICT_PREFS, DISTRICTS, FARMS, FIGHTERS, FRUIT_IDS, FRUITS, SATURATION, SHELVES, STOCK, UPGRADES, type FruitId } from '../data/balance';
+import { DISTRICT_NAMES, FARM_NAMES, FRUIT_NAMES, UPGRADE_NAMES } from '../data/names';
 import { currentGame } from '../game';
-import { plannedDeliveries } from '../sim/delivery';
+import { contractedTomorrow, farmStatus } from '../sim/farms';
 import { winChance } from '../sim/odds';
 import {
   capacity,
@@ -11,7 +11,7 @@ import {
   dealerCost,
   fighterCost,
   isAttackable,
-  isFruitUnlocked,
+  isFruitAvailable,
   isOwned,
   maxShelves,
   nextUpgrade,
@@ -27,7 +27,7 @@ import type { World } from '../sim/world';
 import { dec1, int, money, pct } from './format';
 import { IconCheck, IconFist, IconLock, IconUserPlus } from './icons';
 import { Num } from './Num';
-import { attackTarget, selectedDealer, sheet } from './store';
+import { attackTarget, contractDraft, expandedFruit, selectedDealer, selectedFarm, sheet, uiTick } from './store';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -57,75 +57,85 @@ function demandHint(world: World, f: FruitId): string {
   return parts.join(', ');
 }
 
+/** Höfe, die eine Sorte anbauen */
+function farmsFor(f: FruitId): number[] {
+  return FARMS.map((_, i) => i).filter((i) => FARMS[i].fruits.includes(f));
+}
+
 export function StockSheet() {
+  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+  void uiTick.value;
   const g = currentGame()!;
   const s = g.state;
-  const planned = plannedDeliveries(s);
   const cap = capacity(s);
   const cooled = s.crates.filter((c) => c.cooled).length;
+  const open = expandedFruit.value;
   return (
     <>
       <div class="stock-list">
         {FRUIT_IDS.map((f) => {
-          const unlocked = isFruitUnlocked(s, f);
+          const available = isFruitAvailable(s, f);
           const r = fruitRange(s, f);
           const amp = r.perDay > 0 || r.units > 0 ? ampelFor(r.days) : 'none';
           const crates = countCrates(s, f);
-          const tomorrow = planned.filter((c) => c.fruit === f).length;
+          const tomorrow = contractedTomorrow(s, f);
           const kiosk = FRUITS[f].crateCost * STOCK.kioskFactor;
-          const canKiosk = unlocked && s.kioskToday < STOCK.kioskPerDay && s.crates.length < cap && s.money >= kiosk;
+          const canKiosk = available && s.kioskToday < STOCK.kioskPerDay && s.crates.length < cap && s.money >= kiosk;
           const oldest = s.crates.filter((c) => c.fruit === f).reduce((m, c) => Math.min(m, c.fresh), 1);
           return (
-            <div key={f} class={`stock-row ${unlocked ? '' : 'locked'}`}>
-              <span class="crate-icon" style={{ background: hex(FRUITS[f].color) }}>
-                {crates > 0 ? <b>{crates}</b> : null}
-              </span>
-              <div class="sr-main">
-                <b>{FRUIT_NAMES[f]}</b>
-                {unlocked ? (
-                  <small class="muted">
-                    {demandHint(g.world, f) || (crates ? `älteste Kiste ${pct(oldest)} frisch` : 'kein Bestand')}
-                  </small>
-                ) : (
-                  <small class="muted">
-                    <IconLock size={11} /> nach Eroberung: {DISTRICT_NAMES[FRUITS[f].unlock]}
-                  </small>
-                )}
-              </div>
-              <Num
-                class={`range ${amp}`}
-                text={
-                  r.perDay > 0
-                    ? `Reichweite: ${int(r.units)} Stück im Bestand geteilt durch etwa ${int(r.perDay)} verkaufte Stück pro Tag.`
-                    : 'Reichweite: Von dieser Sorte wurde in den letzten Tagen nichts verkauft.'
-                }
-              >
-                {r.perDay > 0 ? rangeText(r.days) : r.units > 0 ? `${int(r.units)} St.` : '–'}
-              </Num>
-              <div class="sr-order">
-                <button
-                  class="icon-btn small-btn"
-                  aria-label="weniger"
-                  disabled={!unlocked || s.orders[f] <= 0}
-                  onClick={() => g.command({ type: 'setOrder', fruit: f, crates: s.orders[f] - 1 })}
-                >
-                  −
+            <div key={f} class={`stock-item ${open === f ? 'open' : ''}`}>
+              <div class={`stock-row ${available ? '' : 'locked'}`}>
+                <button class="sr-name" onClick={() => (expandedFruit.value = open === f ? null : f)}>
+                  <span class="crate-icon" style={{ background: hex(FRUITS[f].color) }}>
+                    {crates > 0 ? <b>{crates}</b> : null}
+                  </span>
+                  <span class="sr-main">
+                    <b>{FRUIT_NAMES[f]}</b>
+                    {available ? (
+                      <small class="muted">{demandHint(g.world, f) || (crates ? `älteste Kiste ${pct(oldest)} frisch` : 'kein Bestand')}</small>
+                    ) : (
+                      <small class="muted">
+                        <IconLock size={11} /> wächst nur auf Gang-Höfen
+                      </small>
+                    )}
+                  </span>
                 </button>
-                <Num text={`Lieferung jeden Morgen um 06:00: ${s.orders[f]} Kisten zu je ${money(FRUITS[f].crateCost)}, bezahlt beim Abladen.`}>
-                  <b class="mono">{tomorrow}</b>
+                <Num
+                  class={`range ${amp}`}
+                  text={
+                    r.perDay > 0
+                      ? `Reichweite: ${int(r.units)} Stück im Bestand und die Lieferungen der nächsten Tage bei etwa ${int(r.perDay)} verkauften Stück pro Tag.`
+                      : 'Reichweite: Von dieser Sorte wurde in den letzten Tagen nichts verkauft.'
+                  }
+                >
+                  {r.perDay > 0 ? rangeText(r.days) : r.units > 0 ? `${int(r.units)} St.` : '–'}
                 </Num>
-                <button
-                  class="icon-btn small-btn"
-                  aria-label="mehr"
-                  disabled={!unlocked || s.orders[f] >= WHOLESALER.maxCratesPerFruit}
-                  onClick={() => g.command({ type: 'setOrder', fruit: f, crates: s.orders[f] + 1 })}
-                >
-                  +
+                <Num class="sr-tomorrow" text="Lieferung morgen um 06:00 aus deinen Verträgen mit den Höfen, bezahlt beim Abladen.">
+                  <small>morgen</small> <b class="mono">{tomorrow}</b>
+                </Num>
+                <button class="btn small kiosk-btn" disabled={!canKiosk} onClick={() => g.command({ type: 'kioskBuy', fruit: f })}>
+                  Kiosk {money(kiosk)}
                 </button>
               </div>
-              <button class="btn small kiosk-btn" disabled={!canKiosk} onClick={() => g.command({ type: 'kioskBuy', fruit: f })}>
-                Kiosk {money(kiosk)}
-              </button>
+              {open === f && (
+                <div class="sr-farms">
+                  {farmsFor(f).map((i) => (
+                    <button
+                      key={i}
+                      class="sr-farm"
+                      onClick={() => {
+                        selectedFarm.value = i;
+                        contractDraft.value = null;
+                        sheet.value = 'farms';
+                      }}
+                    >
+                      <b>{FARM_NAMES[i]}</b>
+                      <span class="muted">{farmStatus(s, i)}</span>
+                      <span class="link">Zum Hof</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -145,7 +155,7 @@ export function StockSheet() {
         </Num>
       </div>
       <p class="sheet-intro">
-        Mit + und − legst du fest, wie viele Kisten jeden Morgen kommen. Jedes Viertel kauft je Sorte nur eine begrenzte Menge am Tag, gemischt verdienst du mehr.
+        Nachschub kommt nur über Verträge mit Höfen. Tippe eine Sorte an, um zu sehen, wer sie anbaut. Jedes Viertel kauft je Sorte nur eine begrenzte Menge, gemischt verdienst du mehr.
       </p>
     </>
   );
@@ -174,6 +184,8 @@ function dealerStatus(world: World, d: Dealer, hasCrates: boolean): string {
 export { dealerStatus };
 
 export function PeopleSheet() {
+  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+  void uiTick.value;
   const g = currentGame()!;
   const s = g.state;
   const cost = dealerCost(s);
@@ -256,6 +268,8 @@ export function PeopleSheet() {
 }
 
 export function BuildSheet() {
+  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+  void uiTick.value;
   const g = currentGame()!;
   const s = g.state;
   const cost = shelfCost(s);
@@ -287,6 +301,8 @@ export function BuildSheet() {
 }
 
 export function ActSheet() {
+  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+  void uiTick.value;
   const g = currentGame()!;
   const s = g.state;
   const owned = ownedCount(s);
@@ -328,6 +344,8 @@ function chanceText(p: number): string {
 }
 
 export function AttackSheet() {
+  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+  void uiTick.value;
   const g = currentGame()!;
   const s = g.state;
   const i = attackTarget.value;
@@ -337,7 +355,8 @@ export function AttackSheet() {
   const def = DISTRICTS[id];
   const attackable = isAttackable(s, g.world, i);
   const p = winChance(s.fighters, ds.gang);
-  const fruits = FRUIT_IDS.filter((f) => FRUITS[f].unlock === id).map((f) => FRUIT_NAMES[f]);
+  const prefs = DISTRICT_PREFS[id];
+  const fruits = [...FRUIT_IDS].sort((a, b) => prefs[b] - prefs[a]).slice(0, 2).map((f) => FRUIT_NAMES[f]);
   const spots = g.world.spots.filter((sp) => sp.district === id).length;
   if (ds.owner === 'player') return <p class="sheet-intro">{DISTRICT_NAMES[id]} gehört dir.</p>;
   return (
@@ -354,7 +373,7 @@ export function AttackSheet() {
       </div>
       <p class="sheet-intro">
         Nach der Eroberung: {spots} neue Verkaufsplätze, Preise {pct(def.priceLevel - 1)} höher als im Untergrund
-        {fruits.length ? `, beim Großhändler neu: ${fruits.join(', ')}` : ''}. Pro Platz kauft das Viertel etwa {int(SATURATION.demandPerSpot)} Stück am Tag.
+, gefragt sind vor allem {fruits.join(' und ')}. Pro Platz kauft das Viertel etwa {int(SATURATION.demandPerSpot)} Stück am Tag.
       </p>
       {!attackable ? (
         <p class="small-text muted">

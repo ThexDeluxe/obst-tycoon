@@ -9,6 +9,7 @@ import { capacity, dealerCost, fighterCost, isAttackable, shelfCost, spotCapacit
 import { createInitialState } from '../src/sim/state';
 import { createStepOutput, flushCommands, step } from '../src/sim/step';
 import { storeCrate } from '../src/sim/stock';
+import { giveContract } from './helpers';
 import { STORY } from '../src/sim/story';
 import type { GameState } from '../src/sim/types';
 import { createWorld } from '../src/sim/world';
@@ -46,14 +47,16 @@ describe('Kiosk und Regale', () => {
     expect(s.money).toBe(1000 - STOCK.kioskPerDay * FRUITS.apple.crateCost * STOCK.kioskFactor);
   });
 
-  it('gesperrte Sorten gibt es erst nach der Eroberung', () => {
+  it('Sorten, die nur auf Gang-Höfen wachsen, gibt es auch am Kiosk nicht', () => {
     const s = fresh();
     const before = s.crates.length;
-    run(s, { type: 'kioskBuy', fruit: 'banana' });
+    run(s, { type: 'kioskBuy', fruit: 'dragonfruit' });
     expect(s.crates).toHaveLength(before);
-    run(s, { type: 'debugConquer', district: 1 });
     run(s, { type: 'kioskBuy', fruit: 'banana' });
     expect(s.crates).toHaveLength(before + 1);
+    s.farms[5].owner = 'free';
+    run(s, { type: 'kioskBuy', fruit: 'dragonfruit' });
+    expect(s.crates).toHaveLength(before + 2);
   });
 
   it('ein Regal per Plus schafft Platz und wird teurer', () => {
@@ -212,7 +215,8 @@ describe('Aufträge', () => {
   it('führen Schritt für Schritt durchs Spiel und zahlen Belohnungen', () => {
     const s = fresh(8);
     expect(s.story).toBe(0);
-    run(s, { type: 'setOrder', fruit: 'apple', crates: 4 });
+    giveContract(s, 'apple', 4);
+    run(s, { type: 'debugMoney', amount: 0 });
     expect(s.story).toBe(1);
     expect(s.money).toBe(START.money + STORY_REWARDS[0]);
     expect(STORY.length).toBe(STORY_REWARDS.length);
@@ -221,7 +225,9 @@ describe('Aufträge', () => {
   it('erledigte spätere Aufträge werden nachgeholt', () => {
     const s = fresh(9);
     s.money = 100000;
-    run(s, { type: 'setOrder', fruit: 'apple', crates: 6 });
+    giveContract(s, 'apple', 6);
+    giveContract(s, 'banana', 4);
+    s.stats.actions = 1;
     s.earnedTotal = 100;
     // Lagerampel: genug Äpfel für mehr als anderthalb Tage
     s.day = 1;
@@ -230,6 +236,6 @@ describe('Aufträge', () => {
     run(s, { type: 'buyShelf' });
     run(s, { type: 'hireFighter', count: 5 });
     run(s, { type: 'debugConquer', district: 1 });
-    expect(s.story).toBeGreaterThanOrEqual(7);
+    expect(s.story).toBeGreaterThanOrEqual(9);
   });
 });

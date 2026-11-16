@@ -227,3 +227,18 @@ export const BUS_ROUTES: { points: [number, number][]; stops: [number, number][]
   { points: [[2, 28], [68, 28], [68, 65], [2, 65]], stops: [[18, 28], [50, 28], [68, 46], [24, 65]] },
   { points: [[36, 13], [94, 13], [94, 94], [36, 94]], stops: [[52, 13], [80, 13], [94, 50], [60, 94]] },
 ];
+
+/** Umlandkarte (eigenes Raster 300 × 200): Lage der Stadt und der Höfe in der Reihenfolge von FARMS */
+export const UMLAND = {
+  width: 300,
+  height: 200,
+  city: { x: 150, y: 100, w: 70, h: 52 },
+  farms: [
+    [52, 46],
+    [44, 150],
+    [250, 44],
+    [258, 152],
+    [150, 22],
+    [150, 182],
+  ] as [number, number][],
+};

@@ -7,12 +7,16 @@ import { currentGame } from '../game';
 import { dealerUnits } from '../sim/dealers';
 import { capacity, isAttackable, ownedCount } from '../sim/selectors';
 import { stockAmpel } from '../sim/supply';
+import { HEAT } from '../data/balance';
+import { EventCard, FarmsSheet, heatLevel } from './farms';
+import { hasContract } from '../sim/farms';
 import { STORY } from '../sim/story';
 import { clockText } from '../sim/time';
 import { int, money, moneyExact } from './format';
 import {
   IconClose,
   IconCrate,
+  IconFarm,
   IconFaster,
   IconFist,
   IconFullscreen,
@@ -22,6 +26,7 @@ import {
   IconPlay,
   IconRotateLeft,
   IconRotateRight,
+  IconSearch,
   IconSettings,
   IconSound,
   IconSoundOff,
@@ -39,10 +44,12 @@ import { SettingsPanel } from './panels/SettingsPanel';
 import { ActSheet, AttackSheet, BuildSheet, dealerStatus, PeopleSheet, rangeText, StockSheet } from './sheets';
 import {
   attackTarget,
+  contractDraft,
   explain,
   notices,
   portraitDismissed,
   selectedDealer,
+  selectedFarm,
   settings,
   sheet,
   speedIndex,
@@ -76,6 +83,8 @@ function storyAction(): void {
       sheet.value = 'build';
       break;
     case 'farm':
+      if (step.farm !== undefined) selectedFarm.value = step.farm;
+      contractDraft.value = null;
       sheet.value = 'farms';
       break;
     case 'shelf':
@@ -107,6 +116,7 @@ export function TopBar() {
   const step = STORY[s.story];
   const { ampel, range } = stockAmpel(s);
   const muted = settings.value.muted;
+  const heat = heatLevel(s.heat);
   return (
     <div class="topbar">
       <div class="money panel">
@@ -124,6 +134,13 @@ export function TopBar() {
           <small>{range ? `${FRUIT_NAMES[range.fruit]} ${range.perDay > 0 ? rangeText(range.days) : ''}` : `${s.crates.length} Kisten`}</small>
         </span>
       </button>
+      <Num
+        class={`heat panel ${heat.cls}`}
+        text={`Ermittlungsdruck ${Math.round(s.heat)} von 100 (${heat.text}): steigt durch Druck und schmutzige Aktionen bei Bauern, sinkt um ${HEAT.decayPerDay} pro Tag ohne neuen Druck.`}
+      >
+        <IconSearch size={17} />
+        <b class="mono">{Math.round(s.heat)}</b>
+      </Num>
       <button class="objective panel" onClick={storyAction} title="Auftrag: antippen für Hilfe">
         <IconTarget size={18} />
         <span class="obj-text">
@@ -174,9 +191,6 @@ function toggleSheet(id: SheetId): void {
 // Knöpfe unten
 // ---------------------------------------------------------------------------
 
-/** Zusätzliche Knöpfe späterer Ausbaustufen (zum Beispiel Höfe) */
-export const extraActions: { id: SheetId; icon: (p: { size?: number }) => JSX.Element; label: string; sub: () => string; after: SheetId }[] = [];
-
 export function ActionBar() {
   void uiTick.value;
   const g = currentGame();
@@ -184,16 +198,14 @@ export function ActionBar() {
   const s = g.state;
   const hint = STORY[s.story]?.hint;
   const { ampel } = stockAmpel(s);
-  const items: { id: SheetId; icon: (p: { size?: number }) => JSX.Element; label: string; sub: string; warn?: boolean }[] = [
+  const contracts = s.farms.filter((f) => hasContract(f, s.day)).length;
+  const items: { id: SheetId; icon: (p: { size?: number }) => JSX.Element; label: string; sub: string; warn?: boolean; badge?: number }[] = [
     { id: 'stock', icon: IconCrate, label: 'Lager', sub: `${s.crates.length}/${capacity(s)} Kisten`, warn: ampel === 'red' },
+    { id: 'farms', icon: IconFarm, label: 'Höfe', sub: `${contracts} ${contracts === 1 ? 'Vertrag' : 'Verträge'}`, badge: s.pending.length },
     { id: 'people', icon: IconUserPlus, label: 'Leute', sub: `${s.dealers.length} V · ${s.fighters} K` },
     { id: 'build', icon: IconWarehouse, label: 'Bauen', sub: `${s.shelves} Regale` },
     { id: 'act', icon: IconFist, label: 'Akt 1', sub: `${ownedCount(s)}/6 Viertel` },
   ];
-  for (const x of extraActions) {
-    const at = items.findIndex((i) => i.id === x.after);
-    items.splice(at + 1, 0, { id: x.id, icon: x.icon, label: x.label, sub: x.sub() });
-  }
   const hintFor: Record<string, SheetId> = { stock: 'stock', people: 'people', build: 'build', farm: 'farms' };
   return (
     <div class="actionbar">
@@ -204,6 +216,7 @@ export function ActionBar() {
           onClick={() => toggleSheet(it.id)}
         >
           <it.icon size={20} />
+          {it.badge ? <span class="badge">{it.badge}</span> : null}
           <span class="action-text">
             <b>{it.label}</b>
             <small>{it.sub}</small>
@@ -228,9 +241,6 @@ const SHEET_TITLES: Record<SheetId, string> = {
   settings: 'Einstellungen',
 };
 
-/** Weitere Blätter späterer Ausbaustufen */
-export const extraSheets: Partial<Record<SheetId, () => JSX.Element | null>> = {};
-
 export function Sheet() {
   void uiTick.value;
   const g = currentGame();
@@ -238,7 +248,6 @@ export function Sheet() {
   const drag = useRef<{ y: number } | null>(null);
   if (!g || !id) return null;
   const title = id === 'attack' && attackTarget.value !== null ? DISTRICT_NAMES[DISTRICT_IDS[attackTarget.value]] : SHEET_TITLES[id];
-  const Extra = extraSheets[id];
   return (
     <section class={`sheet panel sheet-${id}`}>
       <header
@@ -260,12 +269,12 @@ export function Sheet() {
       </header>
       <div class="sheet-body">
         {id === 'stock' && <StockSheet />}
+        {id === 'farms' && <FarmsSheet />}
         {id === 'people' && <PeopleSheet />}
         {id === 'build' && <BuildSheet />}
         {id === 'act' && <ActSheet />}
         {id === 'attack' && <AttackSheet />}
         {id === 'settings' && <SettingsPanel />}
-        {Extra && <Extra />}
       </div>
     </section>
   );
@@ -361,9 +370,14 @@ export function Notices() {
   const g = currentGame();
   const now = performance.now();
   const list = notices.value.filter((n) => now - n.time < 6000);
-  if (!g || !list.length) return null;
+  const pending = g && !sheet.value && !g.state.battle ? g.state.pending.slice(0, 2) : [];
+  if (!g || (!list.length && !pending.length)) return null;
   return (
     <div class="notices">
+      {pending.map((p) => (
+        <EventCard key={p.id} p={p} />
+      ))}
+      {pending.length > 0 && g.state.pending.length > pending.length && <span class="more-events">+{g.state.pending.length - pending.length} weitere unter Höfe</span>}
       {list.map((n) => {
         const Icon = NOTICE_ICON[n.kind] ?? IconInfo;
         return (

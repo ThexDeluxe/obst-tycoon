@@ -270,3 +270,20 @@ export const IconFarm = (p: P) => (
     <path d="M17 20v-9.5a2 2 0 0 1 4 0V20" />
   </Svg>
 );
+export const IconSearch = (p: P) => (
+  <Svg {...p}>
+    <circle cx="10.5" cy="10.5" r="6" />
+    <path d="M15 15l5.5 5.5" />
+  </Svg>
+);
+export const IconShield = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z" />
+  </Svg>
+);
+export const IconHandshake = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 11l4-4 3 1 3-2 3 1 5 4" />
+    <path d="M7 13l3 3a1.5 1.5 0 0 0 2-2M10 12l3.5 3.5a1.5 1.5 0 0 0 2-2L13 11M3 11l4 4M21 11l-3 3" />
+  </Svg>
+);

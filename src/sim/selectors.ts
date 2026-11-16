@@ -2,9 +2,9 @@
 import {
   DEALERS,
   DISTRICT_IDS,
+  FARMS,
   FIGHTERS,
   FRUIT_IDS,
-  FRUITS,
   SHELVES,
   START,
   UPGRADES,
@@ -59,12 +59,13 @@ export function ownedCount(s: GameState): number {
   return s.districts.filter((d) => d.owner === 'player').length;
 }
 
-export function isFruitUnlocked(s: GameState, f: FruitId): boolean {
-  return isOwned(s, districtIndex(FRUITS[f].unlock));
+/** Sorten, die ein freier oder eigener Hof anbaut (Kiosk und Verträge) */
+export function isFruitAvailable(s: GameState, f: FruitId): boolean {
+  return FARMS.some((def, i) => def.fruits.includes(f) && s.farms[i]?.owner !== 'gang');
 }
 
-export function unlockedFruits(s: GameState): FruitId[] {
-  return FRUIT_IDS.filter((f) => isFruitUnlocked(s, f));
+export function availableFruits(s: GameState): FruitId[] {
+  return FRUIT_IDS.filter((f) => isFruitAvailable(s, f));
 }
 
 /** So viele Verkäufer finden in den eigenen Vierteln einen Platz */

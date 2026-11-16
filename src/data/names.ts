@@ -38,3 +38,29 @@ export const UPGRADE_NAMES = {
   handcart: 'Handkarren',
   cargobike: 'Lastenräder',
 } as const;
+
+/** Höfe des ersten Akts in der Reihenfolge von FARMS */
+export const FARM_NAMES = ['Hof Brinkmann', 'Obsthof Lindenau', 'Tropenhaus Kessler', 'Weingut Sonnenhang', 'Hof Petersen', 'Glashaus Exotica'];
+export const FARMER_NAMES = ['Henning Brinkmann', 'Greta Lindenau', 'Ralf Kessler', 'Ilse Hartmann', 'Jens Petersen', 'Vera Nowak'];
+
+export const TRAIT_NAMES = {
+  stubborn: 'stur',
+  fearful: 'ängstlich',
+  greedy: 'gierig',
+  honest: 'ehrlich',
+} as const;
+
+export const FARM_ACTION_NAMES = {
+  advance: 'Vorschuss zahlen',
+  bind: 'Langfristig binden',
+  helpers: 'Erntehelfer stellen',
+  protect: 'Schutz anbieten',
+  refuse: 'Abnahme verweigern',
+  poach: 'Helfer abwerben',
+  soil: 'Bodenproben fälschen',
+  inspect: 'Tipp ans Lebensmittelamt',
+  takeover: 'Hof übernehmen',
+} as const;
+
+/** Der Boss der Gemüsegang taucht in Meldungen auf */
+export const GANG_BOSS = 'Kohl-Kalle';

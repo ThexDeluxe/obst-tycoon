@@ -1,5 +1,7 @@
 // Aufträge: führen Schritt für Schritt durch das Spiel, vom Untergrund ins Bankenviertel.
+// Die Einführung folgt den Systemen: zuerst ein Vertrag, dann die Lagerampel, dann der erste Druck auf einen Bauern.
 import { DISTRICT_IDS, FRUIT_IDS, STORY_REWARDS, STORY_TARGETS } from '../data/balance';
+import { hasContract } from './farms';
 import { districtIndex, isOwned } from './selectors';
 import { stockAmpel } from './supply';
 import type { GameState, MessageKind } from './types';
@@ -13,22 +15,25 @@ export interface StoryStep {
   hint: StoryHint;
   /** Viertel, auf das hingewiesen wird */
   district?: number;
+  /** Hof, der im Blatt Höfe vorausgewählt wird */
+  farm?: number;
   done: (s: GameState) => boolean;
 }
 
 const owned = (s: GameState, id: (typeof DISTRICT_IDS)[number]) => isOwned(s, districtIndex(id));
 
-/** Sorten mit laufender Lieferung */
+/** Sorten mit laufendem Vertrag oder eigenem Hof */
 export function suppliedFruits(s: GameState): number {
-  return FRUIT_IDS.filter((f) => s.orders[f] > 0).length;
+  return FRUIT_IDS.filter((f) => s.farms.some((farm) => hasContract(farm, s.day) && (farm.contract!.crates[f] ?? 0) > 0)).length;
 }
 
 export const STORY: StoryStep[] = [
   {
-    title: 'Erste Lieferung',
-    text: 'Bestelle eine tägliche Lieferung: Tippe unten auf Lager und erhöhe bei Äpfeln die Kisten pro Tag.',
-    hint: 'stock',
-    done: (s) => suppliedFruits(s) >= 1,
+    title: 'Erster Vertrag',
+    text: 'Ohne Bauern kein Obst. Tippe unten auf Höfe, wähle Hof Brinkmann und biete ihm einen Vertrag an.',
+    hint: 'farm',
+    farm: 0,
+    done: (s) => s.stats.contracts > 0 || suppliedFruits(s) > 0,
   },
   {
     title: 'Erster Umsatz',
@@ -38,7 +43,7 @@ export const STORY: StoryStep[] = [
   },
   {
     title: 'Lagerampel',
-    text: 'Bring die Lagerampel oben auf Grün: Jede Sorte soll mindestens anderthalb Tage reichen.',
+    text: 'Bring die Lagerampel oben auf Grün: Bestand und Lieferungen sollen anderthalb Tage reichen.',
     hint: 'stock',
     done: (s) => s.day >= 1 && stockAmpel(s).ampel === 'green',
   },
@@ -55,10 +60,23 @@ export const STORY: StoryStep[] = [
     done: (s) => s.shelves >= STORY_TARGETS.shelves,
   },
   {
+    title: 'Gemischte Ware',
+    text: 'Jedes Viertel kauft je Sorte nur eine begrenzte Menge. Schließe einen Vertrag für eine zweite Sorte, etwa Bananen bei Kessler.',
+    hint: 'farm',
+    farm: 2,
+    done: (s) => suppliedFruits(s) >= STORY_TARGETS.fruits,
+  },
+  {
     title: 'Eigene Leute',
     text: `Stelle ${STORY_TARGETS.fighters} Straßenkämpfer zusammen. Sie warten im Hof neben dem Lager.`,
     hint: 'people',
     done: (s) => s.fighters >= STORY_TARGETS.fighters || s.stats.battlesWon > 0,
+  },
+  {
+    title: 'Erster Druck',
+    text: 'Ein Bauer, der dich fürchtet, liefert billiger: Biete einem Hof Schutz an oder wirb Helfer ab. Die Ermittler sehen zu. Wer sauber bleiben will, zahlt einen Vorschuss.',
+    hint: 'farm',
+    done: (s) => s.stats.actions > 0,
   },
   {
     title: 'Raus aus dem Untergrund',
@@ -66,12 +84,6 @@ export const STORY: StoryStep[] = [
     hint: 'district',
     district: districtIndex('station'),
     done: (s) => owned(s, 'station'),
-  },
-  {
-    title: 'Gemischte Ware',
-    text: 'Bestelle Bananen dazu. Jedes Viertel kauft je Sorte nur eine begrenzte Menge, gemischt verdienst du mehr.',
-    hint: 'stock',
-    done: (s) => suppliedFruits(s) >= STORY_TARGETS.fruits,
   },
   {
     title: 'Mitten in der Stadt',
@@ -88,7 +100,7 @@ export const STORY: StoryStep[] = [
   },
   {
     title: 'Ganz oben',
-    text: 'Erobere das Bankenviertel.',
+    text: 'Erobere das Bankenviertel. Dort zahlen sie für Drachenfrüchte jeden Preis, aber die wachsen nur im Glashaus der Gang.',
     hint: 'district',
     district: districtIndex('banking'),
     done: (s) => owned(s, 'banking'),

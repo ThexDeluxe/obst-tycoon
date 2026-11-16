@@ -66,6 +66,12 @@ export const sheet = signal<SheetId | null>(null);
 export const attackTarget = signal<number | null>(null);
 /** Angetippter Verkäufer */
 export const selectedDealer = signal<number | null>(null);
+/** Aufgeklappte Sorte im Lagerblatt */
+export const expandedFruit = signal<string | null>(null);
+/** Gewählter Hof im Blatt Höfe */
+export const selectedFarm = signal(0);
+/** Vertrag in Bearbeitung (Hof und Bedingungen) */
+export const contractDraft = signal<{ farm: number; crates: Record<string, number>; pricePct: number; days: number; exclusive: boolean } | null>(null);
 /** Abschlussbild wurde schon gezeigt */
 export const winShown = signal(false);
 /** Erklärung zu einer angetippten Zahl */

@@ -51,8 +51,6 @@ export interface FruitDef {
   crateCost: number;
   /** Verkaufspreis je Stück (vor Preisniveau, Aufpreis, Qualität und Frische) */
   unitPrice: number;
-  /** Viertel, dessen Eroberung die Sorte beim Großhändler freischaltet */
-  unlock: DistrictId;
   /** Haltbarkeit in Spieltagen, gekühlt (null: nicht kühlbar) */
   shelfDays: number;
   cooledDays: number | null;
@@ -62,12 +60,12 @@ export interface FruitDef {
 export const CRATE_UNITS = 20;
 
 export const FRUITS: Record<FruitId, FruitDef> = {
-  apple: { id: 'apple', crateCost: 10, unitPrice: 1.0, unlock: 'underground', shelfDays: 8, cooledDays: 16, color: 0xc8402f },
-  banana: { id: 'banana', crateCost: 12, unitPrice: 1.2, unlock: 'station', shelfDays: 4, cooledDays: null, color: 0xe8c547 },
-  strawberry: { id: 'strawberry', crateCost: 18, unitPrice: 1.8, unlock: 'oldtown', shelfDays: 2, cooledDays: 4, color: 0xd9364a },
-  grape: { id: 'grape', crateCost: 21, unitPrice: 2.1, unlock: 'scene', shelfDays: 3, cooledDays: 6, color: 0x7a4a8c },
-  mango: { id: 'mango', crateCost: 28, unitPrice: 2.8, unlock: 'shopping', shelfDays: 5, cooledDays: 8, color: 0xf0a030 },
-  dragonfruit: { id: 'dragonfruit', crateCost: 36, unitPrice: 3.6, unlock: 'banking', shelfDays: 6, cooledDays: 10, color: 0xd8478e },
+  apple: { id: 'apple', crateCost: 10, unitPrice: 1.0, shelfDays: 8, cooledDays: 16, color: 0xc8402f },
+  banana: { id: 'banana', crateCost: 12, unitPrice: 1.2, shelfDays: 4, cooledDays: null, color: 0xe8c547 },
+  strawberry: { id: 'strawberry', crateCost: 18, unitPrice: 1.8, shelfDays: 2, cooledDays: 4, color: 0xd9364a },
+  grape: { id: 'grape', crateCost: 21, unitPrice: 2.1, shelfDays: 3, cooledDays: 6, color: 0x7a4a8c },
+  mango: { id: 'mango', crateCost: 28, unitPrice: 2.8, shelfDays: 5, cooledDays: 8, color: 0xf0a030 },
+  dragonfruit: { id: 'dragonfruit', crateCost: 36, unitPrice: 3.6, shelfDays: 6, cooledDays: 10, color: 0xd8478e },
 };
 
 // ---------------------------------------------------------------------------
@@ -106,10 +104,170 @@ export const DELIVERY = {
   leaveSeconds: 4,
 };
 
-/** Großhändler (Übergang bis zu den Höfen): Daueraufträge je Sorte */
-export const WHOLESALER = {
-  quality: 2,
-  maxCratesPerFruit: 60,
+/** Qualität der Ware vom Kiosk und des Startbestands (Sterne) */
+export const KIOSK_QUALITY = 2;
+
+// ---------------------------------------------------------------------------
+// Bauern: Höfe, Verträge, Aktionen, Ereignisse
+// ---------------------------------------------------------------------------
+export type FarmTrait = 'stubborn' | 'fearful' | 'greedy' | 'honest';
+export type FarmOwner = 'free' | 'gang' | 'player';
+
+export interface FarmDef {
+  id: string;
+  /** Eine oder zwei Sorten */
+  fruits: FruitId[];
+  /** Kisten pro Tag (alle Sorten zusammen) */
+  capacity: number;
+  /** Faktor auf den Grundpreis der Sorte */
+  priceFactor: number;
+  /** Sterne 1 bis 3 */
+  quality: number;
+  trait: FarmTrait;
+  owner: FarmOwner;
+  loyalty: number;
+  fear: number;
+}
+
+/** Höfe des ersten Akts (Namen in names.ts, Lage auf der Umlandkarte in map.ts) */
+export const FARMS: FarmDef[] = [
+  { id: 'brinkmann', fruits: ['apple'], capacity: 12, priceFactor: 1.0, quality: 2, trait: 'honest', owner: 'free', loyalty: 60, fear: 0 },
+  { id: 'lindenau', fruits: ['apple', 'strawberry'], capacity: 10, priceFactor: 1.1, quality: 3, trait: 'stubborn', owner: 'free', loyalty: 45, fear: 0 },
+  { id: 'kessler', fruits: ['banana', 'mango'], capacity: 12, priceFactor: 1.0, quality: 2, trait: 'greedy', owner: 'free', loyalty: 40, fear: 0 },
+  { id: 'sonnenhang', fruits: ['grape', 'strawberry'], capacity: 10, priceFactor: 0.95, quality: 2, trait: 'fearful', owner: 'free', loyalty: 45, fear: 10 },
+  { id: 'petersen', fruits: ['banana', 'grape'], capacity: 12, priceFactor: 0.9, quality: 1, trait: 'fearful', owner: 'gang', loyalty: 20, fear: 30 },
+  { id: 'exotica', fruits: ['dragonfruit', 'mango'], capacity: 10, priceFactor: 1.05, quality: 3, trait: 'greedy', owner: 'gang', loyalty: 15, fear: 20 },
+];
+
+/** Eigenschaften der Bauern: Schwelle für Verträge, Gewichte für Preis, Loyalität und Angst, Wirkung auf Aktionen */
+export const TRAITS: Record<FarmTrait, { threshold: number; price: number; loyalty: number; fear: number; fearGain: number; pressure: number; dirty: number }> = {
+  /** stur: hohe Schwelle, Druck wirkt schwächer */
+  stubborn: { threshold: 15, price: 1, loyalty: 1, fear: 0.7, fearGain: 0.7, pressure: -0.2, dirty: 0 },
+  /** ängstlich: Angst wirkt stark, Druck gelingt leichter */
+  fearful: { threshold: 0, price: 1, loyalty: 1, fear: 1.6, fearGain: 1.5, pressure: 0.2, dirty: 0 },
+  /** gierig: Geld zählt mehr als Treue */
+  greedy: { threshold: 5, price: 1.8, loyalty: 0.6, fear: 1, fearGain: 1, pressure: 0, dirty: 0.1 },
+  /** ehrlich: Treue zählt viel, schmutzige Aktionen misslingen öfter */
+  honest: { threshold: 0, price: 0.8, loyalty: 1.4, fear: 1, fearGain: 1, pressure: 0, dirty: -0.25 },
+};
+
+export const CONTRACTS = {
+  durations: [3, 7, 14] as const,
+  defaultDays: 7,
+  pricePctMin: 70,
+  pricePctMax: 150,
+  pricePctStep: 5,
+  /** Vorschlag: niedrigster Preis mit mindestens dieser Annahmechance */
+  suggestChance: 0.75,
+  /** Exklusiv kostet so viele Prozentpunkte Preis (oder entsprechend Angst) */
+  exclusivePct: 20,
+  /** Annahmechance: Basis plus Punkte (je Punkt 1 %) */
+  baseChance: 0.65,
+  priceWeight: 2,
+  loyaltyWeight: 0.6,
+  fearWeight: 0.5,
+  /** Gute und schlechte Erinnerungen an frühere Entscheidungen */
+  memoryWeight: 5,
+  minChance: 0.02,
+  maxChance: 0.98,
+  /** Verlängern mit einem Tipp gelingt ab dieser Chance */
+  renewMinChance: 0.5,
+  /** Einführung: Der allererste Vertrag klappt ab dieser Chance sicher */
+  firstContractMinChance: 0.5,
+  /** Nach einer Absage verhandelt der Bauer erst am nächsten Tag wieder */
+  rejectCooldownDays: 1,
+  /** Kündigen kostet Loyalität */
+  cancelLoyalty: -10,
+  /** Loyalität je Tag mit laufendem Vertrag */
+  loyaltyPerDay: 1,
+  /** Lager voll, Rest bleibt auf dem Hof */
+  backlogLoyalty: -2,
+  /** Angst senkt den Preis: Abschlag je Punkt Angst */
+  fearDiscount: 0.002,
+  /** Preis eigener Höfe (Erzeugerkosten) als Anteil am Grundpreis */
+  producerPrice: 0.6,
+};
+
+export type FarmActionId = 'advance' | 'bind' | 'helpers' | 'protect' | 'refuse' | 'poach' | 'soil' | 'inspect' | 'takeover';
+export type FarmActionKind = 'clean' | 'pressure' | 'dirty';
+
+export interface FarmActionDef {
+  kind: FarmActionKind;
+  /** Erfolgschance vor Eigenschaften */
+  chance: number;
+  /** Kosten in Euro (Vorschuss: Tageslieferungen, siehe deliveries) */
+  cost: number;
+  /** Ermittlungsdruck bei Erfolg (bei Misserfolg schmutziger Aktionen doppelt) */
+  heat: number;
+  loyalty?: number;
+  fear?: number;
+  /** Tage, die die Wirkung anhält */
+  days?: number;
+  /** Eigene Leute (Kämpfer), die gebunden werden */
+  fighters?: number;
+  /** Preis- oder Kapazitätsänderung als Anteil */
+  price?: number;
+  capacity?: number;
+  /** Vorschuss: so viele Tageslieferungen */
+  deliveries?: number;
+  /** Mindestangst (Hof übernehmen) */
+  fearMin?: number;
+}
+
+export const FARM_ACTIONS: Record<FarmActionId, FarmActionDef> = {
+  advance: { kind: 'clean', chance: 0.95, cost: 0, heat: 0, loyalty: 20, deliveries: 3 },
+  bind: { kind: 'clean', chance: 0.85, cost: 0, heat: 0, loyalty: 10, days: 14 },
+  helpers: { kind: 'clean', chance: 0.9, cost: 0, heat: 0, fighters: 2, days: 3, capacity: 0.3 },
+  protect: { kind: 'pressure', chance: 0.65, cost: 0, heat: 3, fear: 25, fighters: 2, price: -0.15 },
+  refuse: { kind: 'pressure', chance: 0.9, cost: 0, heat: 1, fear: 15, days: 2 },
+  poach: { kind: 'pressure', chance: 0.7, cost: 150, heat: 4, fear: 10, capacity: -0.5 },
+  soil: { kind: 'dirty', chance: 0.6, cost: 400, heat: 12, price: -0.3 },
+  inspect: { kind: 'dirty', chance: 0.7, cost: 200, heat: 8, days: 5 },
+  takeover: { kind: 'dirty', chance: 0.8, cost: 4000, heat: 15, fearMin: 70 },
+};
+
+export const FARM_RULES = {
+  /** Abklingzeit jeder Aktion je Hof in Tagen */
+  cooldownDays: 2,
+  /** Grenzen der Erfolgschance von Aktionen */
+  actionMinChance: 0.05,
+  actionMaxChance: 0.98,
+  /** Langfristig binden: Aufschlag auf die Annahmechance des laufenden Vertrags */
+  bindBonus: 0.1,
+  /** So viele frühere Entscheidungen merkt sich ein Bauer */
+  memorySlots: 4,
+  /** Verrat: Anteil Überlaufen (sonst Aussage) */
+  defectShare: 0.5,
+  /** Misslungene schmutzige Aktion: Druck mal Faktor, Loyalität */
+  failHeatFactor: 2,
+  failLoyalty: -20,
+  /** Angst sinkt je Tag ohne neuen Druck */
+  fearDecay: 5,
+  /** Loyalität sinkt je Tag ohne Vertrag Richtung Ausgangswert (langsam) */
+  loyaltyDrift: 1,
+  /** Bauer läuft über oder sagt aus */
+  betrayFear: 60,
+  betrayLoyalty: 20,
+  betrayChance: 0.1,
+  testifyHeat: 25,
+};
+
+/** Hof-Ereignisse: etwa alle zwei Tage, Antwort mit zwei Knöpfen */
+export const FARM_EVENTS = {
+  chancePerDay: 0.5,
+  hail: { days: 3, capacity: 0.5, helpCost: 100, helpLoyalty: 15, penaltyFear: 10, penaltyMoney: 60 },
+  renegotiate: { pricePct: 10, acceptLoyalty: 5, refuseLoyalty: -15 },
+  harvest: { extra: 0.5, price: 0.5 },
+  bio: { quality: 1, pricePct: 15, refuseLoyalty: -5 },
+};
+
+/** Ermittlungsdruck (Stufen und Folgen mit M10) */
+export const HEAT = {
+  max: 100,
+  decayPerDay: 3,
+  watched: 30,
+  investigation: 60,
+  charges: 85,
 };
 
 // ---------------------------------------------------------------------------
@@ -240,7 +398,7 @@ export const BATTLE = {
 // ---------------------------------------------------------------------------
 // Aufträge (Geschichte und Einführung): Belohnung je Schritt
 // ---------------------------------------------------------------------------
-export const STORY_REWARDS = [20, 30, 40, 40, 50, 60, 150, 100, 300, 400, 600, 1500];
+export const STORY_REWARDS = [20, 30, 40, 40, 50, 60, 60, 80, 150, 300, 400, 600, 1500];
 /** Schwellen der Aufträge */
 export const STORY_TARGETS = {
   firstEarnings: 15,
