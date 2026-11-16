@@ -1,10 +1,11 @@
 // Aufträge: führen Schritt für Schritt durch das Spiel, vom Untergrund ins Bankenviertel.
-import { DISTRICT_IDS, STORY_REWARDS, STORY_TARGETS } from '../data/balance';
+import { DISTRICT_IDS, FRUIT_IDS, STORY_REWARDS, STORY_TARGETS } from '../data/balance';
 import { districtIndex, isOwned } from './selectors';
+import { stockAmpel } from './supply';
 import type { GameState, MessageKind } from './types';
 
 /** Worauf die Oberfläche beim aktuellen Auftrag hinweist */
-export type StoryHint = 'fruit' | 'dealer' | 'shelf' | 'fighter' | 'district' | 'none';
+export type StoryHint = 'stock' | 'people' | 'build' | 'shelf' | 'district' | 'farm' | 'none';
 
 export interface StoryStep {
   title: string;
@@ -17,23 +18,34 @@ export interface StoryStep {
 
 const owned = (s: GameState, id: (typeof DISTRICT_IDS)[number]) => isOwned(s, districtIndex(id));
 
+/** Sorten mit laufender Lieferung */
+export function suppliedFruits(s: GameState): number {
+  return FRUIT_IDS.filter((f) => s.orders[f] > 0).length;
+}
+
 export const STORY: StoryStep[] = [
   {
-    title: 'Erste Kiste',
-    text: 'Kaufe eine Kiste Äpfel: Tippe unten auf Obst und dann auf Äpfel.',
-    hint: 'fruit',
-    done: (s) => s.stats.cratesBought >= 1,
+    title: 'Erste Lieferung',
+    text: 'Bestelle eine tägliche Lieferung: Tippe unten auf Lager und erhöhe bei Äpfeln die Kisten pro Tag.',
+    hint: 'stock',
+    done: (s) => suppliedFruits(s) >= 1,
   },
   {
     title: 'Erster Umsatz',
-    text: `Dein Verkäufer holt die Kiste selbst und sucht sich einen Platz. Verdiene ${STORY_TARGETS.firstEarnings} €.`,
+    text: `Dein Verkäufer holt die Kisten selbst und sucht sich einen Platz. Verdiene ${STORY_TARGETS.firstEarnings} €.`,
     hint: 'none',
     done: (s) => s.earnedTotal >= STORY_TARGETS.firstEarnings,
   },
   {
+    title: 'Lagerampel',
+    text: 'Bring die Lagerampel oben auf Grün: Jede Sorte soll mindestens anderthalb Tage reichen.',
+    hint: 'stock',
+    done: (s) => s.day >= 1 && stockAmpel(s).ampel === 'green',
+  },
+  {
     title: 'Verstärkung',
-    text: 'Heuere einen zweiten Verkäufer an.',
-    hint: 'dealer',
+    text: 'Heuere einen zweiten Verkäufer an: Tippe unten auf Leute.',
+    hint: 'people',
     done: (s) => s.dealers.length >= STORY_TARGETS.dealers,
   },
   {
@@ -45,7 +57,7 @@ export const STORY: StoryStep[] = [
   {
     title: 'Eigene Leute',
     text: `Stelle ${STORY_TARGETS.fighters} Straßenkämpfer zusammen. Sie warten im Hof neben dem Lager.`,
-    hint: 'fighter',
+    hint: 'people',
     done: (s) => s.fighters >= STORY_TARGETS.fighters || s.stats.battlesWon > 0,
   },
   {
@@ -56,10 +68,10 @@ export const STORY: StoryStep[] = [
     done: (s) => owned(s, 'station'),
   },
   {
-    title: 'Wachstum',
-    text: `Baue dein Geschäft aus: ${STORY_TARGETS.dealersMid} Verkäufer.`,
-    hint: 'dealer',
-    done: (s) => s.dealers.length >= STORY_TARGETS.dealersMid,
+    title: 'Gemischte Ware',
+    text: 'Bestelle Bananen dazu. Jedes Viertel kauft je Sorte nur eine begrenzte Menge, gemischt verdienst du mehr.',
+    hint: 'stock',
+    done: (s) => suppliedFruits(s) >= STORY_TARGETS.fruits,
   },
   {
     title: 'Mitten in der Stadt',

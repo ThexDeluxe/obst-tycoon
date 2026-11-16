@@ -226,3 +226,47 @@ export const IconTarget = (p: P) => (
     <circle cx="12" cy="12" r="1" fill="currentColor" />
   </Svg>
 );
+export const IconCheck = (p: P) => (
+  <Svg {...p}>
+    <path d="M5 12.5l4.2 4.2L19 7" />
+  </Svg>
+);
+export const IconSound = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+    <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+  </Svg>
+);
+export const IconSoundOff = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+    <path d="M16 9.5l5 5M21 9.5l-5 5" />
+  </Svg>
+);
+export const IconSnow = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" />
+    <path d="M9.5 4.5L12 6l2.5-1.5M9.5 19.5L12 18l2.5 1.5" />
+  </Svg>
+);
+export const IconBuild = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 20h16M6 20V10l6-5 6 5v10" />
+    <path d="M10 20v-5h4v5" />
+  </Svg>
+);
+export const IconBook = (p: P) => (
+  <Svg {...p}>
+    <path d="M5 4.5h10a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3z" />
+    <path d="M5 17a3 3 0 0 1 3-3h10" />
+    <path d="M9 8h5" />
+  </Svg>
+);
+export const IconFarm = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 20h18" />
+    <path d="M5 20v-8l5-4 5 4v8" />
+    <path d="M8.5 20v-4h3v4" />
+    <path d="M17 20v-9.5a2 2 0 0 1 4 0V20" />
+  </Svg>
+);

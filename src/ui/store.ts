@@ -3,6 +3,9 @@ import { signal } from '@preact/signals';
 import { SAVE } from '../data/balance';
 
 export interface Settings {
+  muted: boolean;
+  effectsVolume: number;
+  ambienceVolume: number;
   shadows: boolean;
   quality: 'low' | 'medium' | 'high';
   saleNumbers: boolean;
@@ -16,6 +19,9 @@ const isTouch = typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 |
 
 function defaults(): Settings {
   return {
+    muted: false,
+    effectsVolume: 0.7,
+    ambienceVolume: 0.4,
     shadows: true,
     quality: isTouch ? 'medium' : 'high',
     saleNumbers: true,
@@ -54,7 +60,7 @@ export const toast = signal<{ text: string; kind: 'info' | 'error'; id: number }
 export const portraitDismissed = signal(false);
 
 /** Geöffnetes Blatt am unteren Rand */
-export type SheetId = 'fruit' | 'dealers' | 'fighters' | 'attack' | 'settings';
+export type SheetId = 'stock' | 'farms' | 'people' | 'build' | 'act' | 'attack' | 'settings';
 export const sheet = signal<SheetId | null>(null);
 /** Viertel, das im Angriffsblatt gezeigt wird */
 export const attackTarget = signal<number | null>(null);
@@ -62,6 +68,16 @@ export const attackTarget = signal<number | null>(null);
 export const selectedDealer = signal<number | null>(null);
 /** Abschlussbild wurde schon gezeigt */
 export const winShown = signal(false);
+/** Erklärung zu einer angetippten Zahl */
+export const explain = signal<{ text: string; id: number } | null>(null);
+let explainId = 0;
+export function showExplain(text: string): void {
+  const id = ++explainId;
+  explain.value = { text, id };
+  setTimeout(() => {
+    if (explain.value?.id === id) explain.value = null;
+  }, 5000);
+}
 
 export interface Notice {
   id: number;

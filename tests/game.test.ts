@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CRATE_UNITS, DEALERS, DISTRICTS, FIGHTERS, FRUITS, SHELVES, START, STORY_REWARDS } from '../src/data/balance';
+import { CRATE_UNITS, DEALERS, DISTRICTS, FIGHTERS, FRUITS, SHELVES, START, STOCK, STORY_REWARDS } from '../src/data/balance';
 import { compareDice } from '../src/sim/battle';
 import { enqueue, type Command } from '../src/sim/commands';
 import { chooseSpot } from '../src/sim/dealers';
@@ -8,6 +8,7 @@ import { unitRevenue } from '../src/sim/sales';
 import { capacity, dealerCost, fighterCost, isAttackable, shelfCost, spotCapacity } from '../src/sim/selectors';
 import { createInitialState } from '../src/sim/state';
 import { createStepOutput, flushCommands, step } from '../src/sim/step';
+import { storeCrate } from '../src/sim/stock';
 import { STORY } from '../src/sim/story';
 import type { GameState } from '../src/sim/types';
 import { createWorld } from '../src/sim/world';
@@ -24,53 +25,52 @@ const ticks = (s: GameState, n: number) => {
 };
 
 describe('Start', () => {
-  it('ein Verkäufer, leeres Lager mit zwei Regalen, nur der Untergrund gehört dir', () => {
+  it('ein Verkäufer, ein paar Kisten Äpfel in zwei Regalen, nur der Untergrund gehört dir', () => {
     const s = fresh();
     expect(s.money).toBe(START.money);
     expect(s.dealers).toHaveLength(1);
-    expect(s.crates).toHaveLength(0);
+    expect(s.crates).toHaveLength(STOCK.startCrates[0].crates);
     expect(capacity(s)).toBe(START.shelves * SHELVES.cratesPerShelf);
     expect(s.districts.filter((d) => d.owner === 'player')).toHaveLength(1);
     expect(s.districts[1].gang).toBe(DISTRICTS.station.garrison);
   });
 });
 
-describe('Kisten und Lager', () => {
-  it('Obst wird kistenweise gekauft und sofort eingelagert', () => {
+describe('Kiosk und Regale', () => {
+  it('der Kiosk gibt höchstens drei Kisten am Tag zum doppelten Preis', () => {
     const s = fresh();
-    run(s, { type: 'buyCrate', fruit: 'apple', count: 3 });
-    expect(s.crates).toHaveLength(3);
-    // Der erste Auftrag (erste Kiste) zahlt eine Belohnung
-    expect(s.money).toBe(START.money - 3 * FRUITS.apple.crateCost + STORY_REWARDS[0]);
+    s.money = 1000;
+    const before = s.crates.length;
+    for (let i = 0; i < 5; i++) run(s, { type: 'kioskBuy', fruit: 'apple' });
+    expect(s.crates.length).toBe(before + STOCK.kioskPerDay);
+    expect(s.money).toBe(1000 - STOCK.kioskPerDay * FRUITS.apple.crateCost * STOCK.kioskFactor);
   });
 
   it('gesperrte Sorten gibt es erst nach der Eroberung', () => {
     const s = fresh();
-    run(s, { type: 'buyCrate', fruit: 'banana' });
-    expect(s.crates).toHaveLength(0);
+    const before = s.crates.length;
+    run(s, { type: 'kioskBuy', fruit: 'banana' });
+    expect(s.crates).toHaveLength(before);
     run(s, { type: 'debugConquer', district: 1 });
-    run(s, { type: 'buyCrate', fruit: 'banana' });
-    expect(s.crates).toHaveLength(1);
+    run(s, { type: 'kioskBuy', fruit: 'banana' });
+    expect(s.crates).toHaveLength(before + 1);
   });
 
-  it('mehr Kisten als Platz gehen nicht, ein Regal per Plus schafft Platz und wird teurer', () => {
+  it('ein Regal per Plus schafft Platz und wird teurer', () => {
     const s = fresh();
     s.money = 10000;
-    run(s, { type: 'buyCrate', fruit: 'apple', count: 99 });
-    expect(s.crates).toHaveLength(capacity(s));
     const c1 = shelfCost(s);
     run(s, { type: 'buyShelf' });
     expect(capacity(s)).toBe((START.shelves + 1) * SHELVES.cratesPerShelf);
     expect(shelfCost(s)).toBeGreaterThan(c1);
-    run(s, { type: 'buyCrate', fruit: 'apple', count: 99 });
-    expect(s.crates).toHaveLength(capacity(s));
   });
 
   it('ohne Geld kein Kauf', () => {
     const s = fresh();
     s.money = 5;
-    run(s, { type: 'buyCrate', fruit: 'apple' });
-    expect(s.crates).toHaveLength(0);
+    const before = s.crates.length;
+    run(s, { type: 'kioskBuy', fruit: 'apple' });
+    expect(s.crates).toHaveLength(before);
     expect(s.messages[s.messages.length - 1].kind).toBe('warning');
   });
 });
@@ -78,7 +78,6 @@ describe('Kisten und Lager', () => {
 describe('Verkäufer', () => {
   it('holen Kisten selbst, suchen sich einen Platz, verkaufen und kommen zurück', () => {
     const s = fresh(2);
-    run(s, { type: 'buyCrate', fruit: 'apple', count: 3 });
     const d = s.dealers[0];
     const modes = new Set<string>();
     for (let i = 0; i < 2400 && s.earnedTotal < 40; i++) {
@@ -93,7 +92,7 @@ describe('Verkäufer', () => {
   it('wählen nur Plätze in eigenen Vierteln, höchstens zwei pro Platz', () => {
     const s = fresh(3);
     s.money = 100000;
-    run(s, { type: 'buyCrate', fruit: 'apple', count: 12 });
+    for (let i = 0; i < 8; i++) storeCrate(s, 'apple', 2);
     while (s.dealers.length < spotCapacity(s, world)) run(s, { type: 'hireDealer' });
     run(s, { type: 'hireDealer' });
     expect(s.dealers.length).toBe(spotCapacity(s, world));
@@ -213,21 +212,24 @@ describe('Aufträge', () => {
   it('führen Schritt für Schritt durchs Spiel und zahlen Belohnungen', () => {
     const s = fresh(8);
     expect(s.story).toBe(0);
-    run(s, { type: 'buyCrate', fruit: 'apple' });
+    run(s, { type: 'setOrder', fruit: 'apple', crates: 4 });
     expect(s.story).toBe(1);
-    expect(s.money).toBe(START.money - FRUITS.apple.crateCost + STORY_REWARDS[0]);
+    expect(s.money).toBe(START.money + STORY_REWARDS[0]);
     expect(STORY.length).toBe(STORY_REWARDS.length);
   });
 
   it('erledigte spätere Aufträge werden nachgeholt', () => {
     const s = fresh(9);
     s.money = 100000;
-    run(s, { type: 'buyCrate', fruit: 'apple' });
+    run(s, { type: 'setOrder', fruit: 'apple', crates: 6 });
     s.earnedTotal = 100;
+    // Lagerampel: genug Äpfel für mehr als anderthalb Tage
+    s.day = 1;
+    s.salesDays = [{ ...s.soldToday, apple: 60 }];
     run(s, { type: 'hireDealer' });
     run(s, { type: 'buyShelf' });
     run(s, { type: 'hireFighter', count: 5 });
     run(s, { type: 'debugConquer', district: 1 });
-    expect(s.story).toBeGreaterThanOrEqual(6);
+    expect(s.story).toBeGreaterThanOrEqual(7);
   });
 });

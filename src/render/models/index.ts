@@ -17,6 +17,7 @@ export type ModelId =
   | 'scooter'
   | 'cargobike'
   | 'foodtruck'
+  | 'truck'
   | 'crate';
 
 export interface ModelFile {
@@ -133,6 +134,24 @@ export const MODELS: Record<ModelId, (b: Batcher) => void> = {
     b.box(-0.33, 0.45, -0.55, -0.32, 0.72, 0.25);
     b.color(0x22262a);
     for (const [x, z] of [[-0.32, -0.45], [0.32, -0.45], [-0.32, 0.5], [0.32, 0.5]]) b.box(x - 0.03, 0, z - 0.11, x + 0.03, 0.22, z + 0.11);
+  },
+  /** Lieferwagen mit Kastenaufbau, Fahrtrichtung +Z */
+  truck(b) {
+    b.color(0xf2f0ea);
+    b.box(-0.42, 0.18, -1.15, 0.42, 1.25, 0.55);
+    b.color(0x2f7d4a);
+    b.box(-0.425, 0.42, -1.1, 0.425, 0.62, 0.5);
+    b.color(0xe8e4da);
+    b.box(-0.4, 0.18, 0.55, 0.4, 0.95, 1.15);
+    b.color(0x39434c);
+    b.box(-0.38, 0.62, 1.0, 0.38, 0.9, 1.16);
+    b.box(-0.41, 0.62, 0.62, -0.4, 0.88, 1.0);
+    b.box(0.4, 0.62, 0.62, 0.41, 0.88, 1.0);
+    b.color(0x22262a);
+    for (const [x, z] of [[-0.42, -0.75], [0.42, -0.75], [-0.42, 0.8], [0.42, 0.8]]) b.box(x - 0.04, 0, z - 0.17, x + 0.04, 0.3, z + 0.17);
+    b.color(0xfff4d0);
+    b.box(-0.32, 0.3, 1.15, -0.18, 0.4, 1.17);
+    b.box(0.18, 0.3, 1.15, 0.32, 0.4, 1.17);
   },
   crate(b) {
     b.color(PAL.crateWood);

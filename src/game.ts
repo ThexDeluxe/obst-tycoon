@@ -1,16 +1,22 @@
 // Steuert Simulation, Darstellung und Oberfläche: feste Tickrate mit Akkumulator,
 // Pause bei verborgenem Tab und während eines Würfelduells, Autosave.
-import { CAMERA, TIME } from './data/balance';
+import { audio, type SoundName } from './audio/engine';
+import { AMBIENT, CAMERA, TIME } from './data/balance';
 import { GameView } from './render/view';
 import { PointerInput } from './render/input';
 import { saveToSlot } from './save/storage';
 import { enqueue, type Command } from './sim/commands';
 import { createStepOutput, flushCommands, isPaused, step, type StepOutput } from './sim/step';
+import { stockAmpel, type Ampel } from './sim/supply';
 import { STORY } from './sim/story';
-import type { GameState } from './sim/types';
+import { hourOf } from './sim/time';
+import type { Cue, GameState } from './sim/types';
 import { getWorld, type World } from './sim/world';
 import { moneyExact } from './ui/format';
 import { attackTarget, notices, screen, selectedDealer, settings, sheet, speedIndex, uiTick, type Settings } from './ui/store';
+
+/** Töne zu den Ereignissen der Simulation */
+const CUE_SOUND: Record<Cue, SoundName> = { build: 'build', contract: 'stamp', good: 'good', bad: 'bad', dirty: 'dirty', alarm: 'alarm' };
 
 export class Game {
   readonly world: World;
@@ -27,6 +33,8 @@ export class Game {
   private input: PointerInput;
   private lastMessageId = 0;
   private lastStory = -1;
+  private lastAmpel: Ampel | null = null;
+  private audioActive = true;
   // Messwerte für die Debug-Anzeige
   fps = 0;
   tps = 0;
@@ -52,7 +60,7 @@ export class Game {
     this.view.labels.handlers = {
       onDistrict: (i) => this.openDistrict(i),
       onShelf: () => this.command({ type: 'buyShelf' }),
-      onWarehouse: () => (sheet.value = 'fruit'),
+      onWarehouse: () => (sheet.value = 'stock'),
     };
     this.input = new PointerInput(canvas, this.view.rig, {
       onTap: (x, y) => this.onTap(x, y),
@@ -92,6 +100,7 @@ export class Game {
     this.view.floaters.clear();
     this.lastMessageId = state.messages.length ? state.messages[state.messages.length - 1].id : 0;
     this.lastStory = state.story;
+    this.lastAmpel = stockAmpel(state).ampel;
     selectedDealer.value = null;
     attackTarget.value = null;
     sheet.value = null;
@@ -173,10 +182,26 @@ export class Game {
     }
   }
 
+  /** Umgebungston, Stille bei Pause und Warnton, wenn die Lagerampel auf Rot springt */
+  private updateAudio(inMenu: boolean, speed: number): void {
+    const active = !document.hidden && (inMenu || speed > 0 || isPaused(this.state));
+    if (active !== this.audioActive) {
+      this.audioActive = active;
+      audio.setActive(active);
+    }
+    audio.ambience(hourOf(this.state), this.state.peds.length / AMBIENT.maxPedestrians, speed);
+    if (inMenu || this.demo) return;
+    const amp = stockAmpel(this.state).ampel;
+    if (amp === 'red' && this.lastAmpel !== null && this.lastAmpel !== 'red') audio.play('warn');
+    this.lastAmpel = amp;
+  }
+
   private onResize = () => this.view.resize();
 
   private onVisibility = () => {
     if (document.hidden) {
+      this.audioActive = false;
+      audio.setActive(false);
       this.autosave();
       if (this.hiddenSpeed === null) {
         this.hiddenSpeed = speedIndex.value;
@@ -308,6 +333,16 @@ export class Game {
       flushCommands(this.state, this.world, out);
     }
     const alpha = running ? Math.min(1, Math.max(0, this.acc)) : 1;
+    // Töne nur im eigenen Spiel, nicht im Hintergrund des Hauptmenüs
+    if (!this.demo && !inMenu) {
+      if (out.sales.length) audio.play('sale');
+      if (out.delivery.arrived) audio.play('truck');
+      if (out.delivery.unloaded > 0) audio.play('unload');
+      for (const c of out.cues) audio.play(CUE_SOUND[c]);
+    }
+    out.delivery.arrived = false;
+    out.delivery.unloaded = 0;
+    out.cues.length = 0;
     if (out.sales.length) {
       if (settings.value.saleNumbers && !this.demo && !inMenu) {
         const start = Math.max(0, out.sales.length - 3);
@@ -345,6 +380,7 @@ export class Game {
     if (this.uiTimer >= 0.25) {
       this.uiTimer = 0;
       this.pollMessages();
+      this.updateAudio(inMenu, speed);
       uiTick.value++;
     }
     if (!inMenu) this.autosaveTimer += dt;

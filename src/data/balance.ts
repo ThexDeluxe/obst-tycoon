@@ -35,7 +35,7 @@ export function secondsToTicks(seconds: number): number {
 // Start
 // ---------------------------------------------------------------------------
 export const START = {
-  money: 120,
+  money: 150,
   dealers: 1,
   shelves: 2,
   fighters: 0,
@@ -43,28 +43,102 @@ export const START = {
 };
 
 // ---------------------------------------------------------------------------
-// Obst: wird kistenweise gekauft, verkauft wird einzeln
+// Obst: kommt kistenweise per Lieferung, verkauft wird einzeln
 // ---------------------------------------------------------------------------
 export interface FruitDef {
   id: FruitId;
-  /** Preis einer Kiste beim Großhändler */
+  /** Grundpreis einer Kiste beim Erzeuger */
   crateCost: number;
-  /** Verkaufspreis je Stück (vor dem Preisniveau des Viertels) */
+  /** Verkaufspreis je Stück (vor Preisniveau, Aufpreis, Qualität und Frische) */
   unitPrice: number;
-  /** Viertel, dessen Eroberung die Sorte freischaltet */
+  /** Viertel, dessen Eroberung die Sorte beim Großhändler freischaltet */
   unlock: DistrictId;
+  /** Haltbarkeit in Spieltagen, gekühlt (null: nicht kühlbar) */
+  shelfDays: number;
+  cooledDays: number | null;
   color: number;
 }
 
 export const CRATE_UNITS = 20;
 
 export const FRUITS: Record<FruitId, FruitDef> = {
-  apple: { id: 'apple', crateCost: 10, unitPrice: 1.0, unlock: 'underground', color: 0xc8402f },
-  banana: { id: 'banana', crateCost: 12, unitPrice: 1.2, unlock: 'station', color: 0xe8c547 },
-  strawberry: { id: 'strawberry', crateCost: 18, unitPrice: 1.8, unlock: 'oldtown', color: 0xd9364a },
-  grape: { id: 'grape', crateCost: 21, unitPrice: 2.1, unlock: 'scene', color: 0x7a4a8c },
-  mango: { id: 'mango', crateCost: 28, unitPrice: 2.8, unlock: 'shopping', color: 0xf0a030 },
-  dragonfruit: { id: 'dragonfruit', crateCost: 36, unitPrice: 3.6, unlock: 'banking', color: 0xd8478e },
+  apple: { id: 'apple', crateCost: 10, unitPrice: 1.0, unlock: 'underground', shelfDays: 8, cooledDays: 16, color: 0xc8402f },
+  banana: { id: 'banana', crateCost: 12, unitPrice: 1.2, unlock: 'station', shelfDays: 4, cooledDays: null, color: 0xe8c547 },
+  strawberry: { id: 'strawberry', crateCost: 18, unitPrice: 1.8, unlock: 'oldtown', shelfDays: 2, cooledDays: 4, color: 0xd9364a },
+  grape: { id: 'grape', crateCost: 21, unitPrice: 2.1, unlock: 'scene', shelfDays: 3, cooledDays: 6, color: 0x7a4a8c },
+  mango: { id: 'mango', crateCost: 28, unitPrice: 2.8, unlock: 'shopping', shelfDays: 5, cooledDays: 8, color: 0xf0a030 },
+  dragonfruit: { id: 'dragonfruit', crateCost: 36, unitPrice: 3.6, unlock: 'banking', shelfDays: 6, cooledDays: 10, color: 0xd8478e },
+};
+
+// ---------------------------------------------------------------------------
+// Lager, Lieferungen und Kiosk
+// ---------------------------------------------------------------------------
+export const STOCK = {
+  /** Kiosk um die Ecke: Notlösung mit Tageslimit zum mehrfachen Grundpreis */
+  kioskPerDay: 3,
+  kioskFactor: 2,
+  /** Unter dieser Frische gibt es nur noch einen Teil des Preises */
+  lowFreshness: 0.4,
+  lowFreshnessPrice: 0.6,
+  /** Qualität: Abweichung je Stern von 2 Sternen auf Haltbarkeit und Verkaufspreis */
+  qualityStep: 0.1,
+  /** Kühlraum: gekühlte Kisten und Baukosten */
+  coldRoomCrates: 12,
+  coldRoomCost: 600,
+  /** Reichweite: Durchschnitt der verkauften Menge über so viele Tage */
+  rangeDays: 3,
+  /** Hochrechnung des laufenden Tages erst nach so vielen Stunden mit Ware */
+  extrapolateAfterHours: 4,
+  /** Hochrechnung eines Tages mit Ausverkauf: höchstens bis zu diesem Anteil des Tages mit Ware */
+  minAvailShare: 0.25,
+  /** Lagerampel in Tagen: grün ab, gelb ab, darunter rot */
+  ampelGreen: 1.5,
+  ampelYellow: 0.5,
+  /** Startbestand */
+  startCrates: [{ fruit: 'apple' as FruitId, crates: 4 }],
+};
+
+export const DELIVERY = {
+  /** Uhrzeit der Morgenlieferung */
+  hour: 6,
+  arriveSeconds: 5,
+  unloadSecondsPerCrate: 0.3,
+  leaveSeconds: 4,
+};
+
+/** Großhändler (Übergang bis zu den Höfen): Daueraufträge je Sorte */
+export const WHOLESALER = {
+  quality: 2,
+  maxCratesPerFruit: 60,
+};
+
+// ---------------------------------------------------------------------------
+// Nachfrage: Tagesbedarf, Sättigung und Aufpreis
+// ---------------------------------------------------------------------------
+export const SATURATION = {
+  /** Tagesbedarf je Verkaufsplatz über alle Sorten (Stück) */
+  demandPerSpot: 130,
+  /** Ist der Tagesbedarf erreicht, verkauft sich nur noch dieser Anteil */
+  saturatedFactor: 0.25,
+  /** Darüber hinaus sinkt die Kaufbereitschaft bis zu diesem Überhang (Anteil des Tagesbedarfs) auf null */
+  overflow: 0.5,
+  /** Aufpreis für Sorten, von denen ein Viertel heute noch wenig bekommen hat */
+  premiumMax: 1.6,
+};
+
+/** Vorlieben der Viertel (relative Gewichte, bestimmen den Tagesbedarf je Sorte) */
+export const DISTRICT_PREFS: Record<DistrictId, Record<FruitId, number>> = {
+  underground: { apple: 3, banana: 3, strawberry: 1, grape: 1, mango: 0.5, dragonfruit: 0.5 },
+  station: { apple: 3, banana: 4, strawberry: 1, grape: 1, mango: 1, dragonfruit: 0.5 },
+  oldtown: { apple: 1.5, banana: 1, strawberry: 3, grape: 2, mango: 2, dragonfruit: 1.5 },
+  scene: { apple: 1, banana: 1, strawberry: 3, grape: 4, mango: 1.5, dragonfruit: 1 },
+  shopping: { apple: 1, banana: 1, strawberry: 2.5, grape: 2, mango: 3, dragonfruit: 2 },
+  banking: { apple: 0.5, banana: 0.5, strawberry: 1.5, grape: 2, mango: 3, dragonfruit: 4 },
+};
+
+/** Vertriebsqualität: wie gut die Verkäufer Sorten und Viertel wählen (0..1) */
+export const SALES_QUALITY = {
+  base: 0.7,
 };
 
 // ---------------------------------------------------------------------------
@@ -166,14 +240,14 @@ export const BATTLE = {
 // ---------------------------------------------------------------------------
 // Aufträge (Geschichte und Einführung): Belohnung je Schritt
 // ---------------------------------------------------------------------------
-export const STORY_REWARDS = [20, 30, 40, 40, 50, 150, 200, 300, 400, 600, 1500];
+export const STORY_REWARDS = [20, 30, 40, 40, 50, 60, 150, 100, 300, 400, 600, 1500];
 /** Schwellen der Aufträge */
 export const STORY_TARGETS = {
   firstEarnings: 15,
   dealers: 2,
   shelves: 3,
   fighters: 5,
-  dealersMid: 5,
+  fruits: 2,
 };
 
 // ---------------------------------------------------------------------------

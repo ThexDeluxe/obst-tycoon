@@ -1,5 +1,5 @@
 // Schilder in der Welt als HTML über der 3D-Ansicht: Viertel (rot für feindliches Gebiet, mit Angriff),
-// das Plus über dem nächsten freien Regalplatz und ein Hinweis, wenn das Lager leer ist.
+// das Plus über dem nächsten freien Regalplatz und ein Hinweis zum Lager (leer, Sorte geht aus, Lieferung).
 import { DISTRICT_IDS } from '../data/balance';
 import { DISTRICT_NAMES } from '../data/names';
 
@@ -47,7 +47,7 @@ export class WorldLabels {
     root.appendChild(this.shelfEl);
     this.warehouseEl = document.createElement('button');
     this.warehouseEl.className = 'wh-bubble';
-    this.warehouseEl.textContent = 'Lager leer: Obst kaufen';
+    this.warehouseEl.textContent = '';
     this.warehouseEl.addEventListener('click', () => this.handlers.onWarehouse());
     root.appendChild(this.warehouseEl);
   }
@@ -69,7 +69,7 @@ export class WorldLabels {
     anchors: [number, number][],
     hintDistrict: number | null,
     shelf: { x: number; y: number; z: number; cost: number; affordable: boolean; hint: boolean } | null,
-    emptyWarehouse: { x: number; y: number; z: number } | null,
+    warehouseNote: { x: number; y: number; z: number; text: string; info: boolean } | null,
     visible: boolean,
   ): void {
     this.root.style.display = visible ? '' : 'none';
@@ -107,8 +107,12 @@ export class WorldLabels {
       project(shelf.x, shelf.y, shelf.z, pt);
       this.place(this.shelfEl, pt.x, pt.y);
     } else this.shelfEl.style.display = 'none';
-    if (emptyWarehouse) {
-      project(emptyWarehouse.x, emptyWarehouse.y, emptyWarehouse.z, pt);
+    if (warehouseNote) {
+      if (this.warehouseEl.textContent !== warehouseNote.text) {
+        this.warehouseEl.textContent = warehouseNote.text;
+        this.warehouseEl.className = `wh-bubble ${warehouseNote.info ? 'info' : ''}`;
+      }
+      project(warehouseNote.x, warehouseNote.y, warehouseNote.z, pt);
       this.place(this.warehouseEl, pt.x, pt.y);
     } else this.warehouseEl.style.display = 'none';
   }

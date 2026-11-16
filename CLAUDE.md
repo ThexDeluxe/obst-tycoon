@@ -34,7 +34,9 @@ Vor jedem Commit: `npm test` grün, `npm run build` und `npm run lint` ohne Fehl
 - `src/save/` Speicherformat mit Versionsnummer und Migrationen, IndexedDB über idb-keyval.
 - `scripts/` Balancing-Bot (`npm run balance`) und Screenshot-Prüfung (`npm run shots`).
 - Wichtige Dateien: `src/sim/dealers.ts` (Verkäufer-KI), `src/sim/battle.ts` und `src/sim/odds.ts` (Würfelduell),
-  `src/sim/story.ts` (Aufträge), `src/render/labels.ts` (Schilder und Plus in der Welt), `src/ui/Hud.tsx` (Oberfläche).
+  `src/sim/story.ts` (Aufträge), `src/render/labels.ts` (Schilder und Plus in der Welt), `src/ui/Hud.tsx` (Oberfläche),
+  `src/sim/stock.ts` (Frische, Kühlung, Tagesbedarf), `src/sim/supply.ts` (Reichweite, Lagerampel), `src/sim/delivery.ts` (Lieferwagen),
+  `src/ui/sheets.tsx` (Blätter), `src/audio/engine.ts` (Töne per Web Audio, kennt die Simulation nicht).
 
 ## Befehle
 

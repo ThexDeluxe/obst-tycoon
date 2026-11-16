@@ -14,8 +14,10 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { RENDER } from '../data/balance';
-import { capacity, isAttackable, shelfCost } from '../sim/selectors';
+import { DELIVERY, FRUIT_IDS, RENDER, secondsToTicks } from '../data/balance';
+import { FRUIT_NAMES } from '../data/names';
+import { isAttackable, shelfCost } from '../sim/selectors';
+import { fruitRange, runsOutAt } from '../sim/supply';
 import type { GameState } from '../sim/types';
 import type { World } from '../sim/world';
 import { CameraRig } from './camera';
@@ -27,6 +29,7 @@ import { CLOTHES, PAL, PANTS, SKIN } from './palette';
 import { PeopleLayer } from './people';
 import { VehicleLayer } from './vehicles';
 import { WarehouseView } from './warehouse';
+import { createModel } from './models';
 
 export interface ViewSettings {
   shadows: boolean;
@@ -56,6 +59,7 @@ export class GameView {
   private overlays: Mesh[];
   private overlayAlpha: number[];
   private selectRing: Mesh;
+  private truck = createModel('truck');
   readonly floaters: Floaters;
   readonly labels: WorldLabels;
   private raycaster = new Raycaster();
@@ -98,6 +102,9 @@ export class GameView {
     this.overlays = buildDistrictOverlays(world);
     this.overlayAlpha = this.overlays.map(() => -1);
     for (const o of this.overlays) this.scene.add(o);
+
+    this.truck.visible = false;
+    this.scene.add(this.truck);
 
     this.selectRing = new Mesh(new RingGeometry(0.3, 0.38, 24), new MeshBasicMaterial({ color: 0x2f8f4e }));
     this.selectRing.rotation.x = -Math.PI / 2;
@@ -185,6 +192,51 @@ export class GameView {
     }
   }
 
+  /** Lieferwagen auf der Lagerstraße: fährt von Westen vor, hält am Tor, fährt nach Osten weiter */
+  private updateTruck(state: GameState, alpha: number): void {
+    const d = state.delivery;
+    if (!d) {
+      this.truck.visible = false;
+      return;
+    }
+    const wh = this.world.warehouse;
+    const stopX = wh.doorX + wh.doorWidth / 2 + 0.6;
+    const laneZ = wh.doorY + 2.5;
+    const t = d.t + alpha;
+    let x = stopX;
+    if (d.phase === 'arrive') {
+      const k = Math.min(1, t / secondsToTicks(DELIVERY.arriveSeconds));
+      x = -6 + (stopX + 6) * (1 - (1 - k) * (1 - k));
+    } else if (d.phase === 'leave') {
+      const k = Math.min(1, t / secondsToTicks(DELIVERY.leaveSeconds));
+      x = stopX + 24 * k * k;
+    }
+    this.truck.visible = true;
+    this.truck.position.set(x, 0, laneZ);
+    this.truck.rotation.y = Math.PI / 2;
+  }
+
+  /** Hinweis über dem Lager: leer, oder eine Sorte geht heute noch aus */
+  private warehouseNote(state: GameState): string | null {
+    if (state.delivery) {
+      const d = state.delivery;
+      return d.phase === 'arrive' ? `Lieferung: ${d.total} Kisten` : `Lieferung: ${d.unloaded} von ${d.total} Kisten`;
+    }
+    const idleWithout = state.crates.length === 0 && state.dealers.some((d) => d.mode === 'idle' && d.load.length === 0);
+    if (idleWithout) return 'Lager leer: Lager antippen';
+    let soonest: { fruit: string; at: number } | null = null;
+    for (const f of FRUIT_IDS) {
+      const r = fruitRange(state, f);
+      if (r.perDay <= 0) continue;
+      const at = runsOutAt(state, r);
+      if (at !== null && (!soonest || at < soonest.at)) soonest = { fruit: FRUIT_NAMES[f], at };
+    }
+    if (!soonest) return null;
+    return `${soonest.fruit} reichen bis ${Math.floor(soonest.at)} Uhr`;
+  }
+
+  private noteTimer = 0;
+  private noteText: string | null = null;
   private labelStates: LabelState[] = [];
 
   /** Zeichnet ein Bild. alpha ist der Anteil zwischen dem letzten und dem nächsten Tick. */
@@ -193,12 +245,13 @@ export class GameView {
     this.lastAlpha = alpha;
     this.rig.update(dt);
     this.updateSun();
-    this.warehouse.sync(state.shelves);
+    this.warehouse.sync(state.shelves, state.coldRoom);
     this.crateTimer -= dt;
     if (this.crateTimer <= 0) {
       this.crateTimer = 0.2;
-      this.warehouse.updateCrates(state.crates.map((c) => c.fruit));
+      this.warehouse.updateCrates(state.crates);
     }
+    this.updateTruck(state, alpha);
     this.updateOverlays(state, dt);
 
     const simTime = (state.totalTicks + alpha) / 10;
@@ -245,14 +298,18 @@ export class GameView {
     const anchor = this.warehouse.nextShelfAnchor(state.shelves);
     const cost = shelfCost(state);
     const wh = this.world.warehouse;
-    const idleWithout = state.crates.length === 0 && state.dealers.some((d) => d.mode === 'idle' && d.load.length === 0);
+    this.noteTimer -= dt;
+    if (this.noteTimer <= 0) {
+      this.noteTimer = 0.5;
+      this.noteText = this.warehouseNote(state);
+    }
     this.labels.update(
       project,
       this.labelStates,
       this.world.labels,
       this.hints.district,
       anchor ? { ...anchor, cost, affordable: state.money >= cost, hint: this.hints.shelf } : null,
-      idleWithout && capacity(state) > 0 ? { x: wh.doorX + 1, y: 2.2, z: wh.hall.y + wh.hall.h - 1 } : null,
+      this.noteText ? { x: wh.doorX + 1, y: 2.2, z: wh.hall.y + wh.hall.h - 1, text: this.noteText, info: !!state.delivery } : null,
       this.hints.labels,
     );
   }

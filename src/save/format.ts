@@ -1,8 +1,9 @@
 // Speicherformat: JSON mit Versionsnummer und einer Migrationsfunktion pro Version.
 // Diese Datei hat keine Abhängigkeit zum Browser und wird in den Tests geprüft.
-import { START } from '../data/balance';
+import { DISTRICT_IDS, SALES_QUALITY, START, WHOLESALER } from '../data/balance';
 import { createDealer } from '../sim/dealers';
 import { spotCapacity } from '../sim/selectors';
+import { emptyCounts } from '../sim/stock';
 import type { GameState } from '../sim/types';
 import { createInitialState, STATE_VERSION } from '../sim/state';
 import { getWorld } from '../sim/world';
@@ -36,11 +37,37 @@ function toVersion3(raw: Record<string, unknown>): Record<string, unknown> {
   return fresh as unknown as Record<string, unknown>;
 }
 
+/**
+ * Version 4 (M7): Lieferungen, Frische, Kühlung und Sättigung. Der Spielfortschritt bleibt erhalten,
+ * vorhandene Kisten gelten als frisch, die Verkäufer laden ihre Ware ins Lager zurück.
+ */
+function toVersion4(raw: Record<string, unknown>): Record<string, unknown> {
+  const s = raw as unknown as GameState & { crates: { id: number; fruit: string }[] };
+  s.crates = (s.crates ?? []).map((c) => ({ id: c.id, fruit: c.fruit as GameState['crates'][number]['fruit'], fresh: 1, quality: WHOLESALER.quality, cooled: false }));
+  for (const d of s.dealers ?? []) d.load = (d.load ?? []).map((l) => ({ ...l, fresh: 1, quality: WHOLESALER.quality }));
+  s.coldRoom = false;
+  s.delivery = null;
+  s.backlog = [];
+  s.orders = emptyCounts();
+  s.kioskToday = 0;
+  s.soldToday = emptyCounts();
+  s.salesDays = [];
+  s.availToday = emptyCounts();
+  s.districtSold = DISTRICT_IDS.map(() => emptyCounts());
+  s.salesQuality = SALES_QUALITY.base;
+  s.spentToday = 0;
+  s.spoiledToday = 0;
+  // Die Aufträge wurden neu geschrieben: von vorn, erledigte werden sofort nachgeholt
+  s.story = 0;
+  return raw;
+}
+
 /** migrations[v] hebt einen Spielstand von Version v auf v + 1. */
 export const migrations: Record<number, Migration> = {
   // Version 1 (M1) und 2 (M2) hatten das ausführliche Wirtschaftsmodell.
   1: (raw) => raw,
   2: toVersion3,
+  3: toVersion4,
 };
 
 export function serialize(state: GameState, label: string): string {
@@ -115,4 +142,5 @@ export function validateState(s: GameState): void {
   if (typeof s.shelves !== 'number' || typeof s.fighters !== 'number') fail('Lager oder Kämpfer');
   if (!s.stats) fail('Statistik');
   if (!Array.isArray(s.history)) s.history = [];
+  if (!s.orders || !s.soldToday || !s.availToday || !Array.isArray(s.districtSold) || !Array.isArray(s.salesDays)) fail('Lager');
 }

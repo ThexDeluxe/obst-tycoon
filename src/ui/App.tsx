@@ -4,9 +4,10 @@ import { currentGame } from '../game';
 import { createInitialState } from '../sim/state';
 import type { GameState } from '../sim/types';
 import { getWorld } from '../sim/world';
-import { ActionBar, BattleModal, CameraControls, DealerCard, DebugOverlay, Notices, PortraitHint, Sheet, Toast, TopBar, WinModal } from './Hud';
+import { BattleModal } from './Battle';
+import { ActionBar, CameraControls, DealerCard, DebugOverlay, ExplainPopup, Notices, PortraitHint, Sheet, Toast, TopBar, WinModal } from './Hud';
 import { MainMenu } from './MainMenu';
-import { screen, selectedDealer, settings, sheet, winShown } from './store';
+import { screen, selectedDealer, settings, sheet, winShown, type SheetId } from './store';
 
 function startGame(state: GameState): void {
   const g = currentGame();
@@ -29,7 +30,7 @@ export function App() {
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const keys: Record<string, 'fruit' | 'dealers' | 'fighters'> = { KeyO: 'fruit', KeyV: 'dealers', KeyK: 'fighters' };
+      const keys: Record<string, SheetId> = { KeyL: 'stock', KeyH: 'farms', KeyP: 'people', KeyB: 'build', KeyT: 'act' };
       const id = keys[e.code];
       if (id) sheet.value = sheet.value === id ? null : id;
     };
@@ -51,6 +52,7 @@ export function App() {
     <>
       <TopBar />
       <Notices />
+      <ExplainPopup />
       <Sheet />
       <DealerCard />
       <ActionBar />

@@ -13,6 +13,22 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   );
 }
 
+function Slider({ label, value, onChange }: { label: string; value: number; onChange(v: number): void }) {
+  return (
+    <label class="row slider">
+      <span>{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.1}
+        value={value}
+        onInput={(e) => onChange(Number((e.target as HTMLInputElement).value))}
+      />
+    </label>
+  );
+}
+
 export function SettingsPanel() {
   // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
   void uiTick.value;
@@ -31,6 +47,11 @@ export function SettingsPanel() {
 
   return (
     <div class="stack">
+      <h3>Ton</h3>
+      <Toggle label="Ton aus" value={s.muted} onChange={(v) => set({ muted: v })} />
+      <Slider label="Effekte" value={s.effectsVolume} onChange={(v) => set({ effectsVolume: v })} />
+      <Slider label="Umgebung" value={s.ambienceVolume} onChange={(v) => set({ ambienceVolume: v })} />
+
       <h3>Grafik</h3>
       <Toggle label="Schatten" value={s.shadows} onChange={(v) => set({ shadows: v })} />
       <label class="row">

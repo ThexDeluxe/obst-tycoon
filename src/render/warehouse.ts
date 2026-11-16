@@ -21,6 +21,8 @@ export class WarehouseView {
   private crateTop: InstancedMesh;
   private mat = new MeshLambertMaterial({ vertexColors: true });
   private crateSlots: { x: number; y: number; z: number }[] = [];
+  private coldSlots: { x: number; y: number; z: number }[] = [];
+  private coldBuilt = false;
   private m = new Matrix4();
   private q = new Quaternion();
   private p = new Vector3();
@@ -35,7 +37,7 @@ export class WarehouseView {
     body.box(-CRATE.w / 2 - 0.005, 0.12, -CRATE.d / 2 - 0.005, CRATE.w / 2 + 0.005, 0.17, CRATE.d / 2 + 0.005);
     const top = new Batcher().color(0xffffff);
     top.box(-CRATE.w / 2 + 0.04, 0, -CRATE.d / 2 + 0.04, CRATE.w / 2 - 0.04, 0.07, CRATE.d / 2 - 0.04);
-    const cap = world.warehouse.shelfSlots.length * SHELVES.cratesPerShelf;
+    const cap = world.warehouse.shelfSlots.length * SHELVES.cratesPerShelf + 12;
     this.crateBody = new InstancedMesh(body.build(), this.mat, cap);
     this.crateTop = new InstancedMesh(top.build(), new MeshLambertMaterial({ color: 0xffffff }), cap);
     for (const im of [this.crateBody, this.crateTop]) {
@@ -49,10 +51,12 @@ export class WarehouseView {
     this.crateTop.setColorAt(0, this.c.setHex(0xffffff));
   }
 
-  /** Baut die feste Geometrie neu, wenn sich die Zahl der Regale geändert hat. */
-  sync(shelves: number): void {
-    if (shelves === this.shelvesBuilt) return;
+  /** Baut die feste Geometrie neu, wenn sich Regale oder Kühlraum geändert haben. */
+  sync(shelves: number, coldRoom = false): void {
+    if (shelves === this.shelvesBuilt && coldRoom === this.coldBuilt) return;
     this.shelvesBuilt = shelves;
+    this.coldBuilt = coldRoom;
+    this.coldSlots = [];
     if (this.staticMesh) {
       this.group.remove(this.staticMesh);
       this.staticMesh.geometry.dispose();
@@ -164,6 +168,7 @@ export class WarehouseView {
     b.color(0x22262a);
     for (const [wx, wz] of [[fx - 0.36, fz - 0.35], [fx + 0.36, fz - 0.35], [fx - 0.36, fz + 0.25], [fx + 0.36, fz + 0.25]]) b.box(wx - 0.05, 0, wz - 0.12, wx + 0.05, 0.25, wz + 0.12);
 
+    if (coldRoom) this.buildColdRoom(b);
     this.buildYard(b);
 
     this.staticMesh = new Mesh(b.build(), this.mat);
@@ -187,6 +192,26 @@ export class WarehouseView {
     const per = SHELVES.cratesPerShelf / 2;
     for (const ly of levels) {
       for (let k = 0; k < per; k++) this.crateSlots.push({ x: x + 0.1 + ((SHELF_W - 0.2) / per) * (k + 0.5), y: ly + 0.04, z: z + 0.5 });
+    }
+  }
+
+  /** Kühlraum hinten rechts in der Ladezone: weiße Paneele, blaue Kante, 12 Kistenplätze */
+  private buildColdRoom(b: Batcher): void {
+    const x0 = 15.2, x1 = 20.6, z0 = 39.35, z1 = 41.45;
+    b.color(0xcfe3ee);
+    b.flat(x0, z0, x1, z1, FLOOR_Y + 0.004);
+    b.color(0xf3f6f7);
+    b.box(x0, FLOOR_Y, z0, x1, 1.0, z0 + 0.08);
+    b.box(x0, FLOOR_Y, z0, x0 + 0.08, 1.0, z1);
+    b.box(x1 - 0.08, FLOOR_Y, z0, x1, 1.0, z1);
+    b.box(x0, FLOOR_Y, z1 - 0.08, x0 + 1.6, 1.0, z1);
+    b.box(x0 + 2.6, FLOOR_Y, z1 - 0.08, x1, 1.0, z1);
+    b.color(0x3d7fb5);
+    b.box(x0 - 0.01, 1.0, z0 - 0.01, x1 + 0.01, 1.06, z1 + 0.01);
+    b.color(0x9fb4bf);
+    b.box(x0 + 0.3, 0.88, z0 + 0.1, x0 + 1.0, 1.0, z0 + 0.4);
+    for (let row = 0; row < 2; row++) {
+      for (let k = 0; k < 6; k++) this.coldSlots.push({ x: x0 + 0.55 + k * 0.82, y: FLOOR_Y + 0.01 + row * 0.33, z: z0 + 0.45 });
     }
   }
 
@@ -224,17 +249,20 @@ export class WarehouseView {
     b.cylinder(x1 - 0.7, z1 - 0.8, 0.3, 0.5, 0.32, 10);
   }
 
-  /** Belegt die Kistenplätze der Regale mit den Kisten aus dem Lager. */
-  updateCrates(fruits: FruitId[]): void {
+  /** Belegt Regale und Kühlraum mit den Kisten aus dem Lager. Ältere Ware wird dunkler. */
+  updateCrates(crates: { fruit: FruitId; fresh: number; cooled: boolean }[]): void {
     let n = 0;
-    for (let i = 0; i < this.crateSlots.length && i < fruits.length; i++) {
-      const slot = this.crateSlots[i];
+    let ri = 0;
+    let ci = 0;
+    for (const crate of crates) {
+      const slot = crate.cooled && ci < this.coldSlots.length ? this.coldSlots[ci++] : this.crateSlots[ri++];
+      if (!slot) continue;
       this.q.identity();
       this.m.compose(this.p.set(slot.x, slot.y, slot.z), this.q, this.s);
       this.crateBody.setMatrixAt(n, this.m);
       this.m.compose(this.p.set(slot.x, slot.y + CRATE.h - 0.02, slot.z), this.q, this.s);
       this.crateTop.setMatrixAt(n, this.m);
-      this.crateTop.setColorAt(n, this.c.setHex(FRUITS[fruits[i]].color));
+      this.crateTop.setColorAt(n, this.c.setHex(FRUITS[crate.fruit].color).multiplyScalar(0.45 + 0.55 * Math.max(0, crate.fresh)));
       n++;
     }
     this.crateBody.count = n;

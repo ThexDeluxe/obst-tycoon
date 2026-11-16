@@ -45,3 +45,31 @@
 - Schlanke Oberfläche: Geld, Auftrag, Tempo oben; Obst, Verkäufer, Kämpfer unten; kurze Blätter.
 - Spielstand Version 3 mit Migration aus Version 1 und 2.
 - Tests neu (35), Balancing-Bot neu, alle Korridore erfüllt.
+
+## M7 Lager: erledigt
+
+- Ware kommt per Lieferwagen jeden Morgen um 06:00. Er ist auf der Lagerstraße zu sehen, fährt vor, lädt Kiste für Kiste ab und fährt weiter. Bis M8 liefert ein Großhändler über Daueraufträge je Sorte.
+- Kiosk um die Ecke als Notlösung: höchstens 3 Kisten am Tag zum doppelten Preis.
+- Frische und Verderb nach Sorte (Tabelle 4.3), Qualität in Sternen, unter 40 % Frische 60 % des Preises, verdorbene Ware wird beim Tagesabschluss entsorgt und gemeldet. Kühlraum mit 12 Plätzen, automatisch mit den verderblichsten Sorten belegt.
+- Reichweite je Sorte und Lagerampel in der Leiste oben, Hinweis über dem Lager („Erdbeeren reichen bis 17 Uhr“, „Lieferung: 3 von 8 Kisten“).
+- Tagesbedarf je Viertel und Sorte nach Vorlieben, Aufpreis bis 1,6-fach, Sättigung. Vertriebsqualität 70 %.
+- Lagerblatt: je Sorte Bestand, Reichweite in Ampelfarbe, Lieferung pro Tag mit Plus und Minus, Hinweis („Altstadt sucht, Bahnhof satt“), Kiosk; darunter Belegung, Kühlung, Kiosk und Vertrieb. Jede Zahl ist antippbar und erklärt sich in einem Satz.
+- Fünf Knöpfe unten vorbereitet (Lager, Leute, Bauen, Akt; Höfe folgt mit M8), Blätter höchstens zwei Drittel hoch, Wischen nach unten schließt.
+- Tonmodul `src/audio/engine.ts`: Kassenklingeln, Lieferwagen, Abladen, Warnton bei roter Ampel, Klicken und Wischen, Bauen, dazu Stadtlärm nach Tageszeit und Passanten, abends Grillen. Stummschalter oben, Effekte und Umgebung getrennt in den Einstellungen.
+- Spielstand Version 4 mit Migration aus Version 3.
+- Tests: 51 (neu: Verderb, Kühlung, Lieferung, Rückstand, Kiosk, Sättigung, Sortiment, Reichweite, Leerlauf, Vertriebsqualität).
+
+### Bot-Ergebnis M7
+
+`npm run balance` (40 Tage, Standardstrategie mit Daueraufträgen nach Verkauf und Bedarf):
+
+| Seed | Bahnhofsviertel | Altstadt | Szeneviertel | Einkaufsmeile | Bankenviertel |
+|---|---|---|---|---|---|
+| 1 | 5 | 10 | 13 | 17 | 22 |
+| 2 | 5 | 9 | 11 | 15 | 23 |
+| 3 | 5 | 11 | 14 | 19 | 22 |
+
+- Alle Korridore erfüllt (Bahnhofsviertel Tag 2 bis 5, Altstadt 5 bis 12, Bankenviertel 12 bis 25, Verkäufer ohne Ware unter 5 % der Stunden, solange das Lager wachsen kann). Laufzeit unter einer Sekunde.
+- Sortiment: Ein Lager nur mit Drachenfrüchten bringt 36 % weniger Gewinn als ein gemischtes (Test in `tests/stock.test.ts`).
+- Leerlauf: Ohne Lieferung ist das Lager spätestens nach zwei Tagen leer, mit Lieferung nicht (Test).
+- Nach dem Bankenviertel begrenzt die Halle (12 Regale, 72 Kisten) den Nachschub. Das ist für den ersten Akt gewollt; mehr Lieferungen bringt die Laderampe in Akt 2.

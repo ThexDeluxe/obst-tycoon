@@ -1,12 +1,13 @@
 // Anlegen eines neuen Spielstands.
-import { DISTRICT_IDS, DISTRICTS, START } from '../data/balance';
+import { DISTRICT_IDS, DISTRICTS, SALES_QUALITY, START, STOCK, WHOLESALER } from '../data/balance';
 import { initAmbient } from './ambient';
 import { createDealer } from './dealers';
 import { seedState } from './rng';
+import { emptyCounts } from './stock';
 import type { GameState } from './types';
 import type { World } from './world';
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export interface NewGameOptions {
   seed?: number;
@@ -36,6 +37,18 @@ export function createInitialState(world: World, opts: NewGameOptions = {}): Gam
     history: [],
     crates: [],
     shelves: START.shelves,
+    coldRoom: false,
+    delivery: null,
+    backlog: [],
+    orders: emptyCounts(),
+    kioskToday: 0,
+    soldToday: emptyCounts(),
+    salesDays: [],
+    availToday: emptyCounts(),
+    districtSold: DISTRICT_IDS.map(() => emptyCounts()),
+    salesQuality: SALES_QUALITY.base,
+    spentToday: 0,
+    spoiledToday: 0,
     dealers: [],
     fighters: START.fighters,
     upgrade: 0,
@@ -48,6 +61,9 @@ export function createInitialState(world: World, opts: NewGameOptions = {}): Gam
     stats: { cratesBought: 0, sold: 0, battlesWon: 0, battlesLost: 0, fightersLost: 0, gangDefeated: 0 },
   };
   for (let i = 0; i < START.dealers; i++) createDealer(state, world);
+  for (const sc of STOCK.startCrates) {
+    for (let i = 0; i < sc.crates; i++) state.crates.push({ id: state.nextId++, fruit: sc.fruit, fresh: 1, quality: WHOLESALER.quality, cooled: false });
+  }
   initAmbient(state, world);
   return state;
 }

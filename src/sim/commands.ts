@@ -1,9 +1,10 @@
 // Befehle an die Simulation. Oberfläche und Balancing-Bot nutzen dieselben Befehle.
 // Sie landen in einer Warteschlange und werden im nächsten Tick ausgeführt.
-import { DISTRICT_IDS, FIGHTERS, FRUITS, type FruitId } from '../data/balance';
+import { DISTRICT_IDS, FIGHTERS, FRUITS, STOCK, WHOLESALER, type FruitId } from '../data/balance';
 import { FRUIT_NAMES, UPGRADE_NAMES } from '../data/names';
 import { battleAuto, battleRetreat, battleRound, startBattle } from './battle';
 import { createDealer } from './dealers';
+import { assignCooling, storeCrate } from './stock';
 import {
   capacity,
   dealerCost,
@@ -14,11 +15,13 @@ import {
   shelfCost,
   spotCapacity,
 } from './selectors';
-import type { GameState, MessageKind } from './types';
+import type { Cue, GameState, MessageKind } from './types';
 import type { World } from './world';
 
 export type Command =
-  | { type: 'buyCrate'; fruit: FruitId; count?: number }
+  | { type: 'kioskBuy'; fruit: FruitId }
+  | { type: 'setOrder'; fruit: FruitId; crates: number }
+  | { type: 'buyColdRoom' }
   | { type: 'hireDealer' }
   | { type: 'buyShelf' }
   | { type: 'hireFighter'; count?: number }
@@ -52,23 +55,39 @@ function pay(s: GameState, amount: number): boolean {
     return false;
   }
   s.money -= amount;
+  s.spentToday += amount;
   return true;
 }
 
 /**
  * Führt einen Befehl aus. Befehle, die die Zeit betreffen (debugSkipHours), erledigt step.ts.
  */
-export function applyCommand(s: GameState, world: World, cmd: Command): void {
+export function applyCommand(s: GameState, world: World, cmd: Command, cue: (c: Cue) => void = () => {}): void {
   switch (cmd.type) {
-    case 'buyCrate': {
-      const count = Math.max(1, Math.floor(cmd.count ?? 1));
-      if (!isFruitUnlocked(s, cmd.fruit)) return fail(s, `${FRUIT_NAMES[cmd.fruit]} gibt es erst nach der nächsten Eroberung.`);
-      const free = capacity(s) - s.crates.length;
-      if (free <= 0) return fail(s, 'Das Lager ist voll. Tippe auf das Plus im Lager, um ein Regal dazuzukaufen.');
-      const n = Math.min(count, free);
-      if (!pay(s, FRUITS[cmd.fruit].crateCost * n)) return;
-      for (let i = 0; i < n; i++) s.crates.push({ id: s.nextId++, fruit: cmd.fruit });
-      s.stats.cratesBought += n;
+    case 'kioskBuy': {
+      if (!isFruitUnlocked(s, cmd.fruit)) return fail(s, `${FRUIT_NAMES[cmd.fruit]} gibt es am Kiosk erst nach der nächsten Eroberung.`);
+      if (s.kioskToday >= STOCK.kioskPerDay) return fail(s, `Der Kiosk gibt höchstens ${STOCK.kioskPerDay} Kisten pro Tag ab.`);
+      if (capacity(s) <= s.crates.length) return fail(s, 'Das Lager ist voll. Tippe auf das Plus im Lager, um ein Regal dazuzukaufen.');
+      const price = FRUITS[cmd.fruit].crateCost * STOCK.kioskFactor;
+      if (!pay(s, price)) return;
+      storeCrate(s, cmd.fruit, WHOLESALER.quality);
+      s.kioskToday++;
+      s.stats.cratesBought++;
+      assignCooling(s);
+      break;
+    }
+    case 'setOrder': {
+      if (!isFruitUnlocked(s, cmd.fruit)) return fail(s, `${FRUIT_NAMES[cmd.fruit]} liefert der Großhändler erst nach der nächsten Eroberung.`);
+      s.orders[cmd.fruit] = Math.max(0, Math.min(WHOLESALER.maxCratesPerFruit, Math.round(cmd.crates)));
+      break;
+    }
+    case 'buyColdRoom': {
+      if (s.coldRoom) return;
+      if (!pay(s, STOCK.coldRoomCost)) return;
+      s.coldRoom = true;
+      assignCooling(s);
+      cue('build');
+      pushMessage(s, 'info', `Kühlraum gebaut: ${STOCK.coldRoomCrates} Kisten bleiben doppelt so lange frisch.`);
       break;
     }
     case 'hireDealer': {
@@ -82,6 +101,7 @@ export function applyCommand(s: GameState, world: World, cmd: Command): void {
       if (s.shelves >= maxShelves(world)) return fail(s, 'Das Lager ist voll ausgebaut.');
       if (!pay(s, shelfCost(s))) return;
       s.shelves++;
+      cue('build');
       break;
     }
     case 'hireFighter': {

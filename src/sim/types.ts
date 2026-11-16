@@ -42,7 +42,10 @@ export interface Vehicle {
   nextStop: number;
 }
 
-export type MessageKind = 'info' | 'money' | 'warning' | 'danger' | 'unlock' | 'story' | 'battle';
+export type MessageKind = 'info' | 'money' | 'warning' | 'danger' | 'unlock' | 'story' | 'battle' | 'delivery';
+
+/** Kurze Ereignisse für Ton und Darstellung. Sie sind nicht Teil des Spielstands. */
+export type Cue = 'build' | 'contract' | 'good' | 'bad' | 'dirty' | 'alarm';
 
 export interface Message {
   id: number;
@@ -55,17 +58,46 @@ export interface Message {
   y?: number;
 }
 
-/** Eine volle Kiste im Lager */
+/** Eine volle Kiste im Lager. Frische 1 = 100 %, 0 = verdorben; Qualität 1 bis 3 Sterne. */
 export interface Crate {
   id: number;
   fruit: FruitId;
+  fresh: number;
+  quality: number;
+  cooled: boolean;
 }
 
 /** Ware, die ein Verkäufer trägt: eine angebrochene oder volle Kiste */
 export interface Load {
   fruit: FruitId;
   units: number;
+  fresh: number;
+  quality: number;
 }
+
+/** Eine Kiste, die angeliefert wird */
+export interface IncomingCrate {
+  fruit: FruitId;
+  quality: number;
+  /** Preis der Kiste, bezahlt beim Abladen */
+  price: number;
+  /** Lieferant (Hof-Index oder -1 für den Großhändler) */
+  source: number;
+}
+
+/** Lieferwagen: fährt vor, lädt ab, fährt weg */
+export interface Delivery {
+  phase: 'arrive' | 'unload' | 'leave';
+  t: number;
+  queue: IncomingCrate[];
+  total: number;
+  unloaded: number;
+  /** Größe einer regulären Tageslieferung (so viel darf als Rückstand bleiben) */
+  daily: number;
+}
+
+/** Je Sorte eine Zahl */
+export type FruitCounts = Record<FruitId, number>;
 
 export type DealerMode = 'idle' | 'loading' | 'toSpot' | 'setup' | 'selling' | 'packing' | 'toWarehouse';
 
@@ -154,6 +186,25 @@ export interface GameState {
   history: number[];
   crates: Crate[];
   shelves: number;
+  coldRoom: boolean;
+  delivery: Delivery | null;
+  /** Kisten, die nicht ins Lager passten und mit der nächsten Lieferung kommen */
+  backlog: IncomingCrate[];
+  /** Daueraufträge beim Großhändler: Kisten pro Tag je Sorte */
+  orders: FruitCounts;
+  kioskToday: number;
+  /** Verkaufte Stück je Sorte heute; Tagesverkauf der letzten Tage, hochgerechnet auf einen ganzen Tag mit Ware */
+  soldToday: FruitCounts;
+  salesDays: FruitCounts[];
+  /** Ticks, in denen heute Ware der Sorte vorrätig war */
+  availToday: FruitCounts;
+  /** Verkaufte Stück je Viertel und Sorte heute (für Sättigung und Aufpreis) */
+  districtSold: FruitCounts[];
+  /** Vertriebsqualität 0..1 */
+  salesQuality: number;
+  /** Ausgaben und Verderb des laufenden Tages */
+  spentToday: number;
+  spoiledToday: number;
   dealers: Dealer[];
   fighters: number;
   /** Gekaufte Ausrüstung für alle Verkäufer: 0 keine, 1 Handkarren, 2 Lastenräder */

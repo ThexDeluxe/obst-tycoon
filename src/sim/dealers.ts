@@ -1,10 +1,12 @@
 // Verkäufer arbeiten selbstständig: Kisten im Lager holen, den besten freien Platz in den
 // eigenen Vierteln suchen, aufbauen, verkaufen und zum Nachschub zurückkehren.
-import { CRATE_UNITS, DEALERS, DISTRICTS, FRUITS, TIME, secondsToTicks } from '../data/balance';
+import { CRATE_UNITS, DEALERS, FRUIT_IDS, TIME, secondsToTicks, type FruitId } from '../data/balance';
 import { FIRST_NAMES, LAST_NAMES } from '../data/names';
 import { findPath, pathLength } from './pathfinding';
 import { rand } from './rng';
+import { unitRevenue } from './sales';
 import { carryCrates, dealerSpeed, isOwned } from './selectors';
+import { demandRatio, freshnessPriceFactor, premiumFactor, saturationFactor, takeOldest } from './stock';
 import { customersPerHour, hourOf } from './time';
 import type { Dealer, GameState } from './types';
 import { idleSpot, loadingPoint } from './warehouseLayout';
@@ -37,15 +39,118 @@ export function spotOccupancy(s: GameState, spot: number, except?: Dealer): numb
   return n;
 }
 
-/** Bewertung eines Platzes: Kundschaft mal Preisniveau, geteilt durch Belegung und Weglänge */
-export function spotScore(s: GameState, world: World, spot: number, occupants: number): number {
-  const sp = world.spots[spot];
-  const def = DISTRICTS[sp.district];
-  const dist = spotDistances(world)[spot];
-  return (customersPerHour(sp.district, hourOf(s)) * def.priceLevel) / (occupants + 1) / (1 + dist / DEALERS.distanceHalf);
+/** Stück einer Sorte, die andere Verkäufer gerade in ein Viertel bringen oder dort anbieten */
+function plannedUnits(s: GameState, world: World, district: number, fruit: FruitId, except: Dealer): number {
+  let n = 0;
+  for (const d of s.dealers) {
+    if (d === except || d.spot === null || world.spots[d.spot].districtIndex !== district) continue;
+    for (const l of d.load) if (l.fruit === fruit) n += l.units;
+  }
+  return n;
 }
 
-/** Sucht den besten freien Platz in den eigenen Vierteln */
+/** Ware, die bald verdirbt, soll zuerst raus: Faktor auf die Bewertung */
+function urgency(fresh: number): number {
+  return freshnessPriceFactor(fresh) * (1 + 2 * Math.max(0, 0.5 - fresh));
+}
+
+/**
+ * Erwarteter Wert einer Kiste einer Sorte an einem Platz: Kundschaft mal Erlös mit Aufpreis, Sättigung und Frische,
+ * geteilt durch die Belegung des Platzes und die Weglänge.
+ */
+export function assignmentScore(
+  s: GameState,
+  world: World,
+  dealer: Dealer,
+  spot: number,
+  fruit: FruitId,
+  occupants: number,
+  extra = 0,
+  fresh = 1,
+): number {
+  const sp = world.spots[spot];
+  const ratio = demandRatio(s, world, sp.districtIndex, fruit, plannedUnits(s, world, sp.districtIndex, fruit, dealer) + extra);
+  const open = Math.max(0, Math.min(1, 1 - ratio));
+  const dist = spotDistances(world)[spot];
+  const value = customersPerHour(sp.district, hourOf(s)) * unitRevenue(fruit, sp.district) * premiumFactor(open) * saturationFactor(ratio) * urgency(fresh);
+  return value / (occupants + 1) / (1 + dist / DEALERS.distanceHalf);
+}
+
+/** Bewertung eines Platzes für die wertvollste vorrätige Sorte */
+export function spotScore(s: GameState, world: World, spot: number, occupants: number): number {
+  let best = 0;
+  const dummy = s.dealers[0];
+  for (const f of FRUIT_IDS) best = Math.max(best, assignmentScore(s, world, dummy, spot, f, occupants));
+  return best;
+}
+
+export interface Assignment {
+  spot: number;
+  fruits: FruitId[];
+}
+
+/** Wählt mit der Wahrscheinlichkeit der Vertriebsqualität die beste Möglichkeit, sonst eine zufällige, die noch etwas bringt */
+function pickWithQuality<T extends { score: number }>(s: GameState, options: T[]): T {
+  let best = options[0];
+  for (const o of options) if (o.score > best.score) best = o;
+  if (rand(s) < s.salesQuality) return best;
+  const useful = options.filter((o) => o.score > 0);
+  return useful.length ? useful[Math.floor(rand(s) * useful.length)] : best;
+}
+
+/** Nichts von der Ware verkauft sich in diesem Viertel heute noch */
+function stalled(s: GameState, world: World, d: Dealer): boolean {
+  if (d.spot === null) return false;
+  const district = world.spots[d.spot].districtIndex;
+  return d.load.every((l) => saturationFactor(demandRatio(s, world, district, l.fruit)) <= 0);
+}
+
+/**
+ * Entscheidet, welche Sorten ein Verkäufer mitnimmt und an welchen Platz er geht.
+ * Wie gut das gelingt, bestimmt die Vertriebsqualität.
+ */
+export function chooseAssignment(s: GameState, world: World, dealer: Dealer): Assignment | null {
+  // Frische der ältesten Kiste je Sorte (Verkäufer nehmen immer die älteste zuerst)
+  const oldest = new Map<FruitId, number>();
+  for (const c of s.crates) if (c.fresh > 0) oldest.set(c.fruit, Math.min(oldest.get(c.fruit) ?? 1, c.fresh));
+  const inStock = FRUIT_IDS.filter((f) => oldest.has(f));
+  const carried = dealer.load.map((l) => l.fruit);
+  const fruits = carried.length ? [carried[0]] : inStock;
+  if (!fruits.length) return null;
+  const freshOf = (f: FruitId) => (carried.length ? (dealer.load.find((l) => l.fruit === f)?.fresh ?? 1) : (oldest.get(f) ?? 1));
+  const options: { spot: number; fruit: FruitId; score: number; occ: number }[] = [];
+  for (const sp of world.spots) {
+    if (!isOwned(s, sp.districtIndex)) continue;
+    const occ = spotOccupancy(s, sp.index, dealer);
+    if (occ >= DEALERS.maxPerSpot) continue;
+    for (const f of fruits) options.push({ spot: sp.index, fruit: f, score: assignmentScore(s, world, dealer, sp.index, f, occ, 0, freshOf(f)), occ });
+  }
+  if (!options.length) return null;
+  const first = pickWithQuality(s, options);
+  // Überall satt: lieber warten als umsonst hinlaufen
+  if (first.score <= 0) return null;
+  const chosen: FruitId[] = [first.fruit];
+  // Weitere Kisten (mit Ausrüstung) für denselben Platz
+  const extraCrates = carried.length ? 0 : carryCrates(s) - 1;
+  const counts = new Map<FruitId, number>();
+  for (const c of s.crates) if (c.fresh > 0) counts.set(c.fruit, (counts.get(c.fruit) ?? 0) + 1);
+  counts.set(first.fruit, (counts.get(first.fruit) ?? 0) - 1);
+  for (let k = 0; k < extraCrates; k++) {
+    const opts: { fruit: FruitId; score: number }[] = [];
+    for (const f of inStock) {
+      if ((counts.get(f) ?? 0) <= 0) continue;
+      const already = chosen.filter((x) => x === f).length * CRATE_UNITS;
+      opts.push({ fruit: f, score: assignmentScore(s, world, dealer, first.spot, f, first.occ, already, oldest.get(f) ?? 1) });
+    }
+    if (!opts.length) break;
+    const pick = pickWithQuality(s, opts);
+    chosen.push(pick.fruit);
+    counts.set(pick.fruit, (counts.get(pick.fruit) ?? 0) - 1);
+  }
+  return { spot: first.spot, fruits: chosen };
+}
+
+/** Sucht den besten freien Platz in den eigenen Vierteln (ohne Rücksicht auf die Ware) */
 export function chooseSpot(s: GameState, world: World, dealer: Dealer): number | null {
   let best: number | null = null;
   let bestScore = -1;
@@ -124,18 +229,13 @@ function currentTile(world: World, d: Dealer): number {
   return world.costs.foot[t] ? t : world.warehouse.door;
 }
 
-/** Nimmt Kisten aus dem Lager, die wertvollste Sorte zuerst */
-export function takeCrates(s: GameState, d: Dealer): number {
-  const want = carryCrates(s) - d.load.length;
+/** Nimmt die gewählten Sorten aus dem Lager, jeweils die älteste Kiste zuerst */
+export function takeCrates(s: GameState, d: Dealer, fruits: FruitId[]): number {
   let taken = 0;
-  for (let k = 0; k < want; k++) {
-    let best = -1;
-    for (let i = 0; i < s.crates.length; i++) {
-      if (best < 0 || FRUITS[s.crates[i].fruit].unitPrice > FRUITS[s.crates[best].fruit].unitPrice) best = i;
-    }
-    if (best < 0) break;
-    const [c] = s.crates.splice(best, 1);
-    d.load.push({ fruit: c.fruit, units: CRATE_UNITS });
+  for (const f of fruits) {
+    const c = takeOldest(s, f);
+    if (!c) continue;
+    d.load.push({ fruit: f, units: CRATE_UNITS, fresh: c.fresh, quality: c.quality });
     taken++;
   }
   return taken;
@@ -225,12 +325,12 @@ export function stepDealers(s: GameState, world: World): void {
         if (--d.timer > 0) break;
         d.timer = secondsToTicks(DEALERS.waitSeconds);
         if (d.load.length === 0 && s.crates.length === 0) break;
-        const spot = chooseSpot(s, world, d);
-        if (spot === null) break;
-        if (d.load.length < carryCrates(s)) takeCrates(s, d);
+        const plan = chooseAssignment(s, world, d);
+        if (!plan) break;
+        if (d.load.length === 0) takeCrates(s, d, plan.fruits);
         if (d.load.length === 0) break;
-        // Kurz am Regal: Kiste aufnehmen
-        d.spot = spot;
+        // Kurz am Regal: Kisten aufnehmen
+        d.spot = plan.spot;
         d.mode = 'loading';
         d.timer = setup;
         break;
@@ -263,6 +363,10 @@ export function stepDealers(s: GameState, world: World): void {
         break;
       case 'selling':
         if (d.load.length === 0 || d.spot === null || !isOwned(s, world.spots[d.spot].districtIndex)) {
+          d.mode = 'packing';
+          d.timer = setup;
+        } else if ((s.totalTicks + d.id) % 50 === 0 && stalled(s, world, d)) {
+          // Das Viertel ist satt: einpacken und woanders weiterverkaufen
           d.mode = 'packing';
           d.timer = setup;
         }
