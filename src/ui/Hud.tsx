@@ -46,6 +46,7 @@ import {
   attackTarget,
   contractDraft,
   explain,
+  farmSheetLevel,
   notices,
   portraitDismissed,
   selectedDealer,
@@ -85,6 +86,7 @@ function storyAction(): void {
     case 'farm':
       if (step.farm !== undefined) selectedFarm.value = step.farm;
       contractDraft.value = null;
+      farmSheetLevel.value = 'normal';
       sheet.value = 'farms';
       break;
     case 'shelf':
@@ -183,6 +185,7 @@ export function TopBar() {
 }
 
 function toggleSheet(id: SheetId): void {
+  if (id === 'farms' && sheet.value !== 'farms') farmSheetLevel.value = 'normal';
   sheet.value = sheet.value === id ? null : id;
   selectedDealer.value = null;
 }
@@ -249,17 +252,26 @@ export function Sheet() {
   if (!g || !id) return null;
   const title = id === 'attack' && attackTarget.value !== null ? DISTRICT_NAMES[DISTRICT_IDS[attackTarget.value]] : SHEET_TITLES[id];
   return (
-    <section class={`sheet panel sheet-${id}`}>
+    <section class={`sheet panel sheet-${id} ${id === 'farms' ? `farm-sheet-${farmSheetLevel.value}` : ''}`}>
       <header
-        onPointerDown={(e) => (drag.current = { y: e.clientY })}
-        onPointerMove={(e) => {
-          // Nach unten wischen schließt das Blatt
-          if (drag.current && e.clientY - drag.current.y > 40) {
-            drag.current = null;
-            sheet.value = null;
-          }
+        onPointerDown={(e) => {
+          drag.current = { y: e.clientY };
+          // Auch wenn der Finger das Kopfteil verlässt, kommt das Loslassen hier an
+          if (!(e.target as Element).closest('button')) (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
         }}
-        onPointerUp={() => (drag.current = null)}
+        onPointerUp={(e) => {
+          const start = drag.current;
+          drag.current = null;
+          if (!start) return;
+          const delta = e.clientY - start.y;
+          if (id === 'farms' && Math.abs(delta) > 35) {
+            const level = farmSheetLevel.value;
+            if (delta < 0) farmSheetLevel.value = level === 'collapsed' ? 'normal' : 'expanded';
+            else if (level === 'expanded') farmSheetLevel.value = 'normal';
+            else if (level === 'normal') farmSheetLevel.value = 'collapsed';
+            else sheet.value = null;
+          } else if (delta > 40) sheet.value = null;
+        }}
       >
         <span class="grabber" />
         <h2>{title}</h2>

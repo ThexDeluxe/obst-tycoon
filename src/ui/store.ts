@@ -70,6 +70,10 @@ export const selectedDealer = signal<number | null>(null);
 export const expandedFruit = signal<string | null>(null);
 /** Gewählter Hof im Blatt Höfe */
 export const selectedFarm = signal(0);
+/** Aktiver Reiter im Hof-Bottom-Sheet */
+export const farmTab = signal<'overview' | 'contract' | 'actions' | 'history'>('overview');
+/** Höhe des Hof-Bottom-Sheets */
+export const farmSheetLevel = signal<'collapsed' | 'normal' | 'expanded'>('normal');
 /** Vertrag in Bearbeitung (Hof und Bedingungen) */
 export const contractDraft = signal<{ farm: number; crates: Record<string, number>; pricePct: number; days: number; exclusive: boolean } | null>(null);
 /** Abschlussbild wurde schon gezeigt */

@@ -100,3 +100,10 @@ Auf Wunsch des Auftraggebers ist das Spiel deutlich einfacher geworden. Die frü
 - **Meldungen mit zwei Antworten** stehen oben in der Mitte über den kurzen Meldungen, solange kein Blatt offen ist. Antippen springt zum Hof. Der Knopf Höfe zeigt die Zahl offener Meldungen.
 - **Auftrag „Erster Druck“:** gilt mit jeder Aktion bei einem Bauern als erledigt. Wer sauber spielen will, zahlt einen Vorschuss, sonst blieben ihm alle späteren Belohnungen versperrt.
 - **Spielstand Version 5:** Stände aus Version 4 behalten alles bis auf die Daueraufträge des Großhändlers; die Höfe starten im Ausgangszustand.
+
+## 3D-Hofwelt (Paket des Auftraggebers)
+
+- **Eingebaut wie geliefert:** neue Three.js-Umlandansicht `src/render/farms-world.ts` (sechs eigene Hofmodelle, Besitzringe, Auswahlring, Warnpunkt bei offener Meldung oder auslaufendem Vertrag, Ziehen, Pinch und Mausrad) und die Hofverwaltung mit den Reitern Übersicht, Vertrag, Aktionen, Verlauf und drei Blatthöhen.
+- **Zwei Tipps:** Mit Reitern bräuchte ein Vertrag drei Tipps. Deshalb zeigt die Übersicht bei einem freien Hof ohne Vertrag direkt das fertige Angebot, und beim Antippen eines anderen Hofs bleibt der gewählte Reiter erhalten. So sind Vertrag und Aktionen weiter zwei Tipps entfernt.
+- **Handy im Querformat:** Das Blatt unten hätte bei 390 Pixel Höhe fast die ganze 3D-Welt verdeckt. Auf niedrigen Bildschirmen (bis 480 Pixel) ist die Hofverwaltung deshalb ein Seitenpanel rechts, links bleibt die Karte. Die Kamera passt die ganze Umgebung in den freien Bereich zwischen Leiste, Blatt und Knöpfen ein.
+- **Wischen am Blatt:** Das Kopfteil hält den Finger fest (Pointer Capture), sonst ging das Loslassen außerhalb des Kopfteils verloren und die Blatthöhe änderte sich nicht.

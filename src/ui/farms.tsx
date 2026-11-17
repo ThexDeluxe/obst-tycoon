@@ -1,6 +1,7 @@
-// Blatt Höfe: Umlandkarte mit den Höfen, Hof-Karte mit Werten, Vertrag und Aktionen, dazu Meldungen mit zwei Antworten.
+// Blatt Höfe: 3D-Umland, kompakte Hofverwaltung und Meldungen mit zwei Antworten.
+import { useEffect, useRef } from 'preact/hooks';
+import { FarmsWorldView } from '../render/farms-world';
 import { CONTRACTS, FARM_ACTIONS, FARMS, FRUITS, HEAT, type FarmActionId, type FruitId } from '../data/balance';
-import { UMLAND } from '../data/map';
 import { FARM_ACTION_NAMES, FARM_NAMES, FARMER_NAMES, FRUIT_NAMES, GANG_BOSS, TRAIT_NAMES } from '../data/names';
 import { currentGame } from '../game';
 import {
@@ -20,12 +21,12 @@ import {
   visibleActions,
   type Offer,
 } from '../sim/farms';
-import type { PendingEvent } from '../sim/types';
+import type { FarmMemory, PendingEvent } from '../sim/types';
 import { money, moneyExact, pct } from './format';
 import { IconStar } from './icons';
 import { Num } from './Num';
 import { BossPortrait, FarmerPortrait } from './Portrait';
-import { contractDraft, selectedFarm, sheet, uiTick } from './store';
+import { contractDraft, farmSheetLevel, farmTab, selectedFarm, sheet, uiTick } from './store';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -34,80 +35,47 @@ function chanceClass(p: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Umlandkarte
+// 3D-Umlandansicht
 // ---------------------------------------------------------------------------
 
-function UmlandMap({ selected }: { selected: number }) {
-  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+export function FarmsWorldOverlay() {
   void uiTick.value;
-  const g = currentGame()!;
-  const s = g.state;
-  const { city } = UMLAND;
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const view = useRef<FarmsWorldView | null>(null);
+
+  useEffect(() => {
+    const element = canvas.current;
+    if (!element) return;
+    const instance = new FarmsWorldView(element, (farm) => {
+      selectedFarm.value = farm;
+      contractDraft.value = null;
+      if (farmSheetLevel.value === 'collapsed') farmSheetLevel.value = 'normal';
+    });
+    view.current = instance;
+    return () => {
+      instance.dispose();
+      view.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const game = currentGame();
+    if (game) view.current?.update(game.state.farms, game.state.day, game.state.pending, selectedFarm.value);
+    // Verdeckte Ränder messen: Leiste oben, Blatt (unten oder als Seitenpanel rechts), Knöpfe unten
+    const top = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0;
+    const bar = document.querySelector('.actionbar')?.getBoundingClientRect().top ?? window.innerHeight;
+    const panel = document.querySelector('.sheet-farms')?.getBoundingClientRect();
+    const side = !!panel && panel.left > window.innerWidth * 0.3;
+    const bottom = window.innerHeight - (panel && !side ? Math.min(panel.top, bar) : bar);
+    const right = panel && side ? window.innerWidth - panel.left : 0;
+    view.current?.setInsets(top + 6, right + 6, bottom + 6, 6);
+  }, [uiTick.value, selectedFarm.value, farmSheetLevel.value]);
+
   return (
-    <svg class="umland" viewBox={`0 0 ${UMLAND.width} ${UMLAND.height}`} role="img" aria-label="Umlandkarte">
-      <rect x="0" y="0" width={UMLAND.width} height={UMLAND.height} rx="10" fill="#dfe8cf" />
-      {/* Felder */}
-      <g fill="#d2deb9">
-        <rect x="18" y="80" width="54" height="34" rx="3" />
-        <rect x="200" y="86" width="62" height="28" rx="3" />
-        <rect x="96" y="150" width="36" height="30" rx="3" />
-        <rect x="178" y="10" width="44" height="26" rx="3" />
-      </g>
-      <g fill="#cfdcae">
-        <rect x="84" y="20" width="40" height="30" rx="3" />
-        <rect x="190" y="150" width="40" height="30" rx="3" />
-      </g>
-      {/* Straßen in die Stadt */}
-      {UMLAND.farms.map(([x, y], i) => (
-        <path key={`r${i}`} d={`M${city.x} ${city.y} L${x} ${y}`} stroke="#cdbb93" stroke-width="5" stroke-linecap="round" />
-      ))}
-      {UMLAND.farms.map(([x, y], i) =>
-        hasContract(s.farms[i], s.day) || s.farms[i].owner === 'player' ? (
-          <path key={`c${i}`} d={`M${city.x} ${city.y} L${x} ${y}`} stroke="#2f7d4a" stroke-width="2" stroke-dasharray="4 4" stroke-linecap="round" />
-        ) : null,
-      )}
-      {/* Stadt */}
-      <rect x={city.x - city.w / 2} y={city.y - city.h / 2} width={city.w} height={city.h} rx="8" fill="#b7bfc4" />
-      <g fill="#97a1a7">
-        <rect x={city.x - 26} y={city.y - 18} width="12" height="14" rx="1.5" />
-        <rect x={city.x - 10} y={city.y - 21} width="9" height="18" rx="1.5" />
-        <rect x={city.x + 4} y={city.y - 16} width="10" height="12" rx="1.5" />
-        <rect x={city.x + 17} y={city.y - 22} width="8" height="19" rx="1.5" />
-      </g>
-      <text x={city.x} y={city.y + 15} text-anchor="middle" class="um-city">
-        Stadt
-      </text>
-      {/* Höfe */}
-      {UMLAND.farms.map(([x, y], i) => {
-        const f = s.farms[i];
-        const contract = hasContract(f, s.day);
-        const ring = f.owner === 'gang' ? '#c0392b' : f.owner === 'player' ? '#23603a' : contract ? '#2f7d4a' : '#8a958f';
-        const fill = f.owner === 'gang' ? '#f6dcd8' : f.owner === 'player' ? '#cfe6d6' : '#ffffff';
-        return (
-          <g
-            key={`f${i}`}
-            class={`um-farm ${selected === i ? 'sel' : ''}`}
-            transform={`translate(${x} ${y})`}
-            onClick={() => {
-              selectedFarm.value = i;
-              contractDraft.value = null;
-            }}
-          >
-            <circle r="22" fill="transparent" />
-            {selected === i && <circle r="17" fill="none" stroke="#1f2a30" stroke-width="2" />}
-            <circle r="13" fill={fill} stroke={ring} stroke-width={contract || f.owner !== 'free' ? 3 : 1.5} />
-            <path d="M-6 5v-6l6-5 6 5v6z" fill={f.owner === 'gang' ? '#c0392b' : '#a5423a'} />
-            <rect x="-1.6" y="1" width="3.2" height="4" fill="#fff" />
-            {FARMS[i].fruits.map((fr, k) => (
-              <circle key={fr} cx={(k - (FARMS[i].fruits.length - 1) / 2) * 7} cy="17.5" r="3" fill={hex(FRUITS[fr].color)} stroke="#fff" stroke-width="1" />
-            ))}
-            <text y={y > UMLAND.height - 30 ? -17 : 29} text-anchor="middle" class="um-label">
-              {FARM_NAMES[i].replace(/^(Hof|Obsthof|Tropenhaus|Weingut|Glashaus) /, '')}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <div class="farms-world" aria-label="Umlandkarte mit sechs Höfen">
+      <canvas ref={canvas} aria-label="3D-Karte: Hof antippen, ziehen zum Verschieben, Mausrad zum Zoomen" />
+      <span class="farms-world-hint">Hof antippen · Ziehen zum Verschieben · Pinch / Mausrad zum Zoomen</span>
+    </div>
   );
 }
 
@@ -342,8 +310,22 @@ function ActionButton({ i, id }: { i: number; id: FarmActionId }) {
   );
 }
 
-function FarmCard({ i }: { i: number }) {
-  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
+type FarmTab = 'overview' | 'contract' | 'actions' | 'history';
+
+const MEMORY_TEXT: Record<FarmMemory, string> = {
+  advance: 'Du hast im Voraus bezahlt.',
+  helpers: 'Du hast Erntehelfer gestellt.',
+  hailHelp: 'Du hast nach dem Hagel geholfen.',
+  bind: 'Du hast einen langfristigen Vertrag angeboten.',
+  protect: 'Du hast Schutz durch deine Leute angeboten.',
+  refuse: 'Du hast eine Lieferung nicht abgenommen.',
+  soil: 'Du hast Bodenproben fälschen lassen.',
+  hailPenalty: 'Du hast nach dem Hagel eine Vertragsstrafe verlangt.',
+  cancel: 'Du hast den Vertrag gekündigt.',
+  takeover: 'Du hast den Hof übernommen.',
+};
+
+function FarmCard({ i, tab }: { i: number; tab: FarmTab }) {
   void uiTick.value;
   const g = currentGame()!;
   const s = g.state;
@@ -351,70 +333,112 @@ function FarmCard({ i }: { i: number }) {
   const def = FARMS[i];
   const line = farmerLine(s, i);
   const owner = f.owner === 'gang' ? 'Gang' : f.owner === 'player' ? 'gehört dir' : 'frei';
+
   return (
     <div class="farm-card">
       <div class="fc-head">
-        <FarmerPortrait farm={i} size={46} />
+        <FarmerPortrait farm={i} size={48} />
         <div class="fc-title">
           <b>{FARM_NAMES[i]}</b>
-          <small>
-            {FARMER_NAMES[i]}, {TRAIT_NAMES[def.trait]}
-          </small>
+          <small>{FARMER_NAMES[i]}, {TRAIT_NAMES[def.trait]}</small>
           <small class="muted">{farmStatus(s, i)}</small>
         </div>
         <span class={`owner-tag ${f.owner}`}>{owner}</span>
       </div>
-      <div class="fc-stats small-text">
-        <Num text={`Kapazität: So viele Kisten liefert der Hof höchstens pro Tag, alle Sorten zusammen. Erntehelfer bringen mehr, Hagel halbiert sie.`}>
-          <b>{farmCapacity(s, i)}</b> Kisten/Tag
-        </Num>
-        {def.fruits.map((fr) => (
-          <Num key={fr} text={`Preis einer Kiste ${FRUIT_NAMES[fr]} beim jetzigen Vertrag oder zum Grundpreis. Angst und Schutz senken ihn.`}>
-            <span class="dot" style={{ background: hex(FRUITS[fr].color) }} /> {moneyExact(cratePrice(s, i, fr))}
-          </Num>
-        ))}
-        <Num text="Qualität: Jeder Stern über zwei bringt 10 % mehr Haltbarkeit und Verkaufspreis, jeder darunter 10 % weniger.">
-          <Stars n={f.quality} />
-        </Num>
-      </div>
-      <div class="fc-bars">
-        <Bar
-          label="Loyalität"
-          value={f.loyalty}
-          kind="loyalty"
-          text="Loyalität: steigt langsam mit laufenden Verträgen und sauberen Aktionen, sinkt bei Druck, Kündigung und vollem Lager."
-        />
-        <Bar
-          label="Angst"
-          value={f.fear}
-          kind="fear"
-          text={`Angst senkt sofort die Preise und sinkt um 5 pro Tag ohne neuen Druck. Über 60 Angst und unter 20 Loyalität läuft ein Bauer über oder sagt aus.`}
-        />
-      </div>
-      {line && <p class="fc-memory">{line}</p>}
-      <ContractBox i={i} />
-      <div class="fc-actions">
-        {visibleActions(s, i).map((id) => (
-          <ActionButton key={id} i={i} id={id} />
-        ))}
-      </div>
-      {f.guards > 0 && (
-        <button class="link-btn" onClick={() => g.command({ type: 'withdrawGuards', farm: i })}>
-          Schutz beenden: {f.guards} Kämpfer zurück in den Hof
-        </button>
+
+      {tab === 'overview' && (
+        <>
+          <div class="fc-stats small-text">
+            <Num text="Kapazität: So viele Kisten liefert der Hof höchstens pro Tag. Erntehelfer bringen mehr, Hagel halbiert sie.">
+              <b>{farmCapacity(s, i)}</b> Kisten/Tag
+            </Num>
+            {def.fruits.map((fr) => (
+              <Num key={fr} text={`Preis einer Kiste ${FRUIT_NAMES[fr]} beim jetzigen Vertrag oder zum Grundpreis. Angst und Schutz senken ihn.`}>
+                <span class="dot" style={{ background: hex(FRUITS[fr].color) }} /> {moneyExact(cratePrice(s, i, fr))}
+              </Num>
+            ))}
+            <Num text="Qualität: Jeder Stern über zwei bringt 10 % mehr Haltbarkeit und Verkaufspreis, jeder darunter 10 % weniger.">
+              <Stars n={f.quality} />
+            </Num>
+          </div>
+          <div class="fc-bars">
+            <Bar label="Loyalität" value={f.loyalty} kind="loyalty" text="Loyalität steigt langsam mit laufenden Verträgen und sauberen Aktionen, sinkt bei Druck, Kündigung und vollem Lager." />
+            <Bar label="Angst" value={f.fear} kind="fear" text="Angst senkt sofort die Preise und sinkt um 5 pro Tag ohne neuen Druck. Über 60 Angst und unter 20 Loyalität läuft ein Bauer über oder sagt aus." />
+          </div>
+          {/* Freier Hof ohne Vertrag: Angebot direkt hier, damit ein Vertrag zwei Tipps braucht */}
+          {f.owner === 'free' && !hasContract(f, s.day) ? (
+            <ContractBox i={i} />
+          ) : (
+            <div class="farm-overview-contract">
+              <span>
+                <b>Vertrag & Lieferung</b>
+                <small>{farmStatus(s, i)}</small>
+              </span>
+              <button class="btn small" onClick={() => (farmTab.value = 'contract')}>Verwalten</button>
+            </div>
+          )}
+          {line && <p class="fc-memory">{line}</p>}
+        </>
+      )}
+
+      {tab === 'contract' && (
+        <div class="farm-tab-content">
+          <h3>Liefervertrag</h3>
+          <ContractBox i={i} />
+        </div>
+      )}
+
+      {tab === 'actions' && (
+        <div class="farm-tab-content">
+          <p class="farm-tab-note">Aktionen verändern Loyalität, Angst, Kapazität oder Ermittlungsdruck. Kosten und Erfolgschance stehen direkt an jeder Aktion.</p>
+          <div class="fc-actions">
+            {visibleActions(s, i).map((id) => <ActionButton key={id} i={i} id={id} />)}
+          </div>
+          {f.guards > 0 && (
+            <button class="link-btn" onClick={() => g.command({ type: 'withdrawGuards', farm: i })}>
+              Schutz beenden: {f.guards} Kämpfer zurück in den Hof
+            </button>
+          )}
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div class="farm-tab-content">
+          <h3>Was sich der Bauer merkt</h3>
+          {f.memory.length ? (
+            <ol class="farm-history">
+              {[...f.memory].reverse().map((memory, index) => <li key={`${memory}-${index}`}>{MEMORY_TEXT[memory]}</li>)}
+            </ol>
+          ) : (
+            <p class="muted small-text">Noch keine besonderen Erinnerungen. Wie du mit dem Hof umgehst, prägt die nächsten Verhandlungen.</p>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
 export function FarmsSheet() {
-  // Liest den veränderlichen Spielzustand: bei jedem UI-Takt neu zeichnen
   void uiTick.value;
   const i = Math.max(0, Math.min(FARMS.length - 1, selectedFarm.value));
+  const tabs: { id: FarmTab; label: string }[] = [
+    { id: 'overview', label: 'Übersicht' },
+    { id: 'contract', label: 'Vertrag' },
+    { id: 'actions', label: 'Aktionen' },
+    { id: 'history', label: 'Verlauf' },
+  ];
   return (
-    <div class="farms">
-      <UmlandMap selected={i} />
-      <FarmCard i={i} />
+    <div class="farms-panel">
+      <nav class="farm-tabs" aria-label="Hofverwaltung">
+        {tabs.map((tab) => (
+          <button key={tab.id} class="farm-tab" type="button" aria-pressed={farmTab.value === tab.id} onClick={() => (farmTab.value = tab.id)}>
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+      <div class="farm-scroll">
+        <FarmCard i={i} tab={farmTab.value} />
+      </div>
     </div>
   );
 }
@@ -431,6 +455,8 @@ export function EventCard({ p }: { p: PendingEvent }) {
   const open = () => {
     selectedFarm.value = p.farm;
     contractDraft.value = null;
+    farmTab.value = 'overview';
+    farmSheetLevel.value = 'normal';
     sheet.value = 'farms';
   };
   return (

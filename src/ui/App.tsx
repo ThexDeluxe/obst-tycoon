@@ -7,7 +7,8 @@ import { getWorld } from '../sim/world';
 import { BattleModal } from './Battle';
 import { ActionBar, CameraControls, DealerCard, DebugOverlay, ExplainPopup, Notices, PortraitHint, Sheet, Toast, TopBar, WinModal } from './Hud';
 import { MainMenu } from './MainMenu';
-import { screen, selectedDealer, settings, sheet, winShown, type SheetId } from './store';
+import { FarmsWorldOverlay } from './farms';
+import { farmSheetLevel, screen, selectedDealer, settings, sheet, winShown, type SheetId } from './store';
 
 function startGame(state: GameState): void {
   const g = currentGame();
@@ -32,6 +33,7 @@ export function App() {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const keys: Record<string, SheetId> = { KeyL: 'stock', KeyH: 'farms', KeyP: 'people', KeyB: 'build', KeyT: 'act' };
       const id = keys[e.code];
+      if (id === 'farms' && sheet.value !== 'farms') farmSheetLevel.value = 'normal';
       if (id) sheet.value = sheet.value === id ? null : id;
     };
   }, []);
@@ -50,6 +52,7 @@ export function App() {
   }
   return (
     <>
+      {sheet.value === 'farms' && <FarmsWorldOverlay />}
       <TopBar />
       <Notices />
       <ExplainPopup />
